@@ -17,9 +17,9 @@ import com.facebook.presto.hive.HivePlugin;
 
 public class HiveAlluxioPlugin
         extends HivePlugin
+{
+    public HiveAlluxioPlugin()
     {
-        public HiveAlluxioPlugin()
-        {
-            super("hive-alluxio");
-        }
+        super("hive-alluxio");
     }
+}

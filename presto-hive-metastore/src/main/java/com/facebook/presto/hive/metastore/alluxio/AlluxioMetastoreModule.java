@@ -19,7 +19,6 @@ import alluxio.client.table.TableMasterClient;
 import alluxio.conf.InstancedConfiguration;
 import alluxio.master.MasterClientContext;
 import alluxio.util.ConfigurationUtils;
-
 import com.facebook.airlift.configuration.AbstractConfigurationAwareModule;
 import com.facebook.presto.hive.metastore.alluxio.AlluxioHiveMetastore;
 import com.facebook.presto.hive.metastore.alluxio.AlluxioHiveMetastoreConfig;
@@ -44,7 +43,7 @@ public class AlluxioMetastoreModule
         configBinder(binder).bindConfig(AlluxioHiveMetastoreConfig.class);
 
         binder.bind(HiveMetastore.class).to(AlluxioHiveMetastore.class).in(Scopes.SINGLETON);
-        newExporter(binder).export(HiveMetastore.class).as(generated -> generated.generatedNameOf(AlluxioHiveMetastore.class));
+        newExporter(binder).export(HiveMetastore.class).as(generatedNameOf(AlluxioHiveMetastore.class));
     }
 
     @Provides

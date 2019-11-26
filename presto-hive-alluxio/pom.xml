@@ -20,6 +20,12 @@
         <dependency>
             <groupId>com.facebook.presto</groupId>
             <artifactId>presto-hive</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.apache.parquet</groupId>
+                    <artifactId>parquet-format</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <!-- Presto SPI -->

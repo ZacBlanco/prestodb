@@ -17,24 +17,22 @@ import alluxio.client.table.TableMasterClient;
 import alluxio.exception.status.AlluxioStatusException;
 import alluxio.grpc.table.Constraint;
 import alluxio.grpc.table.layout.hive.PartitionInfo;
-import alluxio.util.proto.ProtoUtils;
-
 import com.facebook.presto.hive.HiveBasicStatistics;
-import com.facebook.presto.hive.HiveType;
+import com.facebook.presto.hive.metastore.HivePrivilegeInfo;
 import com.facebook.presto.hive.metastore.PartitionStatistics;
 import com.facebook.presto.hive.metastore.PartitionWithStatistics;
-import com.facebook.presto.hive.metastore.PrincipalPrivileges;
 import com.facebook.presto.hive.metastore.thrift.HiveMetastore;
 import com.facebook.presto.hive.metastore.thrift.ThriftMetastoreUtil;
 import com.facebook.presto.spi.NotFoundException;
 import com.facebook.presto.spi.PrestoException;
+import com.facebook.presto.spi.security.PrestoPrincipal;
 import com.facebook.presto.spi.security.RoleGrant;
 import com.facebook.presto.spi.statistics.ColumnStatisticType;
 import com.facebook.presto.spi.type.Type;
 import com.google.inject.Inject;
 import org.apache.hadoop.hive.metastore.api.Database;
+import org.apache.hadoop.hive.metastore.api.Partition;
 import org.apache.hadoop.hive.metastore.api.Table;
-import org.apache.hadoop.hive.ql.security.authorization.plugin.HivePrincipal;
 
 import java.util.Collections;
 import java.util.List;
@@ -145,10 +143,10 @@ public class AlluxioHiveMetastore
     }
 
     @Override
-    public List<String> getAllTables(String databaseName)
+    public Optional<List<String>> getAllTables(String databaseName)
     {
         try {
-            return client.getAllTables(databaseName);
+            return Optional.of(client.getAllTables(databaseName));
         }
         catch (AlluxioStatusException e) {
             throw new PrestoException(HIVE_METASTORE_ERROR, e);
@@ -156,30 +154,10 @@ public class AlluxioHiveMetastore
     }
 
     @Override
-    public List<String> getTablesWithParameter(String databaseName, String parameterKey, String parameterValue)
-    {
-        try {
-            return client.getAllTables(databaseName).stream().filter(s -> {
-                        // TODO Is there a way to do a bulk RPC?
-                        Table table = getTable(databaseName, s).orElse(null);
-                        if (table == null) {
-                            return false;
-                        }
-                        String value = table.getParameters().get(parameterKey);
-                        return value != null && value.equals(parameterValue);
-                    }
-            ).collect(Collectors.toList());
-        }
-        catch (AlluxioStatusException e) {
-            throw new PrestoException(HIVE_METASTORE_ERROR, e);
-        }
-    }
-
-    @Override
-    public List<String> getAllViews(String databaseName)
+    public Optional<List<String>> getAllViews(String databaseName)
     {
         // TODO: Add views on the server side
-        return Collections.emptyList();
+        return Optional.of(Collections.emptyList());
     }
 
     @Override
@@ -195,13 +173,13 @@ public class AlluxioHiveMetastore
     }
 
     @Override
-    public void renameDatabase(String databaseName, String newDatabaseName)
+    public void alterDatabase(String databaseName, Database database)
     {
-        throw new UnsupportedOperationException("renameDatabase");
+        throw new UnsupportedOperationException("alterDatabase");
     }
 
     @Override
-    public void createTable(Table table, PrincipalPrivileges principalPrivileges)
+    public void createTable(Table table)
     {
         throw new UnsupportedOperationException("createTable");
     }
@@ -213,47 +191,13 @@ public class AlluxioHiveMetastore
     }
 
     @Override
-    public void replaceTable(String databaseName, String tableName, Table newTable,
-            PrincipalPrivileges principalPrivileges)
+    public void alterTable(String databaseName, String tableName, Table table)
     {
-        throw new UnsupportedOperationException("replaceTable");
+        throw new UnsupportedOperationException("alterTable");
     }
 
     @Override
-    public void renameTable(String databaseName, String tableName, String newDatabaseName,
-            String newTableName)
-    {
-        throw new UnsupportedOperationException("renameTable");
-    }
-
-    @Override
-    public void commentTable(String databaseName, String tableName, Optional<String> comment)
-    {
-        throw new UnsupportedOperationException("commentTable");
-    }
-
-    @Override
-    public void addColumn(String databaseName, String tableName, String columnName,
-            HiveType columnType, String columnComment)
-    {
-        throw new UnsupportedOperationException("addColumn");
-    }
-
-    @Override
-    public void renameColumn(String databaseName, String tableName, String oldColumnName,
-            String newColumnName)
-    {
-        throw new UnsupportedOperationException("renameColumn");
-    }
-
-    @Override
-    public void dropColumn(String databaseName, String tableName, String columnName)
-    {
-        throw new UnsupportedOperationException("dropColumn");
-    }
-
-    @Override
-    public Optional<Partition> getPartition(String databaseName, String tableName,
+    public Optional<org.apache.hadoop.hive.metastore.api.Partition> getPartition(String databaseName, String tableName,
             List<String> partitionValues)
     {
         throw new UnsupportedOperationException("getPartition");
@@ -307,27 +251,23 @@ public class AlluxioHiveMetastore
     }
 
     @Override
-    public Map<String, Optional<Partition>> getPartitionsByNames(String databaseName,
+    public List<Partition> getPartitionsByNames(String databaseName,
             String tableName, List<String> partitionNames)
     {
         if (partitionNames.isEmpty()) {
-            return Collections.emptyMap();
+            return Collections.emptyList();
         }
 
         try {
             // Get all partitions
             List<PartitionInfo> partitionInfos = ProtoUtils.toPartitionInfoList(
                     client.readTable(databaseName, tableName, Constraint.getDefaultInstance()));
-            // Check that table name is correct
-            // TODO also check for database name equality
-            partitionInfos = partitionInfos.stream().filter(p -> p.getTableName().equals(tableName))
-                    .collect(Collectors.toList());
-            Map<String, Optional<Partition>> result = partitionInfos.stream()
+            List<Partition> result = partitionInfos.stream()
+                    .filter(p -> p.getTableName().equals(tableName))
                     .filter(p -> partitionNames.stream().anyMatch(p.getPartitionName()::equals))
-                    .collect(Collectors.toMap(
-                            PartitionInfo::getPartitionName,
-                            pi -> Optional.of(ProtoUtils.fromProto(pi))));
-            return Collections.unmodifiableMap(result);
+                    .map(ProtoUtils::fromProto)
+                    .collect(Collectors.toList());
+            return Collections.unmodifiableList(result);
         }
         catch (AlluxioStatusException e) {
             throw new PrestoException(HIVE_METASTORE_ERROR, e);
@@ -374,42 +314,42 @@ public class AlluxioHiveMetastore
     }
 
     @Override
-    public void grantRoles(Set<String> roles, Set<HivePrincipal> grantees, boolean withAdminOption,
-            HivePrincipal grantor)
+    public void grantRoles(Set<String> roles, Set<PrestoPrincipal> grantees,
+            boolean withAdminOption, PrestoPrincipal grantor)
     {
         throw new UnsupportedOperationException("grantRoles");
     }
 
     @Override
-    public void revokeRoles(Set<String> roles, Set<HivePrincipal> grantees, boolean adminOptionFor,
-            HivePrincipal grantor)
+    public void revokeRoles(Set<String> roles, Set<PrestoPrincipal> grantees,
+            boolean adminOptionFor, PrestoPrincipal grantor)
     {
         throw new UnsupportedOperationException("revokeRoles");
     }
 
     @Override
-    public Set<RoleGrant> listRoleGrants(HivePrincipal principal)
+    public Set<RoleGrant> listRoleGrants(PrestoPrincipal principal)
     {
         throw new UnsupportedOperationException("listRoleGrants");
     }
 
     @Override
-    public void grantTablePrivileges(String databaseName, String tableName, String tableOwner, HivePrincipal grantee,
+    public void grantTablePrivileges(String databaseName, String tableName, PrestoPrincipal grantee,
             Set<HivePrivilegeInfo> privileges)
     {
         throw new UnsupportedOperationException("grantTablePrivileges");
     }
 
     @Override
-    public void revokeTablePrivileges(String databaseName, String tableName, String tableOwner, HivePrincipal grantee,
-            Set<HivePrivilegeInfo> privileges)
+    public void revokeTablePrivileges(String databaseName, String tableName,
+            PrestoPrincipal grantee, Set<HivePrivilegeInfo> privileges)
     {
         throw new UnsupportedOperationException("revokeTablePrivileges");
     }
 
     @Override
-    public Set<HivePrivilegeInfo> listTablePrivileges(String databaseName, String tableName, String tableOwner,
-            HivePrincipal principal)
+    public Set<HivePrivilegeInfo> listTablePrivileges(String databaseName, String tableName,
+            PrestoPrincipal principal)
     {
         throw new UnsupportedOperationException("listTablePrivileges");
     }

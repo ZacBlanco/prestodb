@@ -13,22 +13,21 @@
  */
 package com.facebook.presto.hive.metastore.alluxio;
 
-import alluxio.grpc.table.FieldSchema;
 import alluxio.grpc.table.Layout;
 import alluxio.grpc.table.layout.hive.PartitionInfo;
+import alluxio.grpc.table.layout.hive.Storage;
 import alluxio.shaded.client.com.google.protobuf.InvalidProtocolBufferException;
-
-import com.facebook.presto.hive.HiveType;
-import com.facebook.presto.hive.metastore.Database;
-import com.facebook.presto.hive.metastore.Partition;
+import com.facebook.presto.hive.HiveBucketProperty;
 import com.facebook.presto.hive.metastore.SortingColumn;
-import com.facebook.presto.hive.metastore.StorageFormat;
-import com.facebook.presto.hive.metastore.Table;
-import com.google.common.collect.Lists;
+import org.apache.hadoop.hive.metastore.api.Database;
+import org.apache.hadoop.hive.metastore.api.Partition;
+import org.apache.hadoop.hive.metastore.api.SerDeInfo;
+import org.apache.hadoop.hive.metastore.api.SkewedInfo;
+import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
+import org.apache.hadoop.hive.metastore.api.Table;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 public class ProtoUtils
@@ -37,10 +36,10 @@ public class ProtoUtils
 
     public static Database fromProto(alluxio.grpc.table.Database db)
     {
-        return Database.builder()
-                .setDatabaseName(db.getDbName())
-                .setLocation(db.hasLocation() ? Optional.of(db.getLocation()) : Optional.empty())
-                .build();
+        Database database = new Database();
+        database.setName(db.getDbName());
+        database.setLocationUri(db.getLocation());
+        return database;
     }
 
     public static Table fromProto(alluxio.grpc.table.TableInfo table)
@@ -53,30 +52,25 @@ public class ProtoUtils
             throw new UnsupportedOperationException("Unsupported table layout: " + layout);
         }
         try {
+            Table tbl = new org.apache.hadoop.hive.metastore.api.Table();
+
             PartitionInfo partitionInfo = alluxio.table.ProtoUtils.toHiveLayout(layout);
 
             // compute the data columns
-            Set<String> partitionColumns = table.getPartitionColsList().stream().map(FieldSchema::getName).collect(Collectors.toSet());
-            List<FieldSchema> dataColumns = table.getSchema().getColsList().stream().filter((f) -> !partitionColumns.contains(f.getName())).collect(Collectors.toList());
+            tbl.setDbName(table.getDbName());
+            tbl.setTableName(table.getTableName());
+            tbl.setOwner(table.getOwner());
+            tbl.setTableType(table.getType().toString());
 
-            Table.Builder builder = Table.builder()
-                    .setDatabaseName(table.getDbName())
-                    .setTableName(table.getTableName())
-                    .setOwner(table.getOwner())
-                    .setTableType(table.getType().toString())
-                    .setDataColumns(dataColumns.stream().map(ProtoUtils::fromProto).collect(Collectors.toList()))
-                    .setPartitionColumns(table.getPartitionColsList().stream().map(ProtoUtils::fromProto).collect(Collectors.toList()))
-                    .setParameters(table.getParametersMap())
-                    .setViewOriginalText(Optional.empty())
-                    .setViewExpandedText(Optional.empty());
+            tbl.setParameters(table.getParametersMap());
+
             alluxio.grpc.table.layout.hive.Storage storage = partitionInfo.getStorage();
-            builder.getStorageBuilder()
-                    .setSkewed(storage.getSkewed())
-                    .setStorageFormat(fromProto(storage.getStorageFormat()))
-                    .setLocation(storage.getLocation())
-                    .setBucketProperty(storage.hasBucketProperty() ? fromProto(storage.getBucketProperty()) : Optional.empty())
-                    .setSerdeParameters(storage.getStorageFormat().getSerdelibParametersMap());
-            return builder.build();
+            StorageDescriptor sd = fromProto(storage);
+            // Set columns
+            sd.setCols(table.getSchema().getColsList().stream().map(ProtoUtils::fromProto)
+                    .collect(Collectors.toList()));
+            tbl.setSd(sd);
+            return tbl;
         }
         catch (InvalidProtocolBufferException e) {
             throw new IllegalArgumentException("Failed to extract PartitionInfo from TableInfo", e);
@@ -104,35 +98,53 @@ public class ProtoUtils
         return Optional.of(new HiveBucketProperty(property.getBucketedByList(), (int) property.getBucketCount(), sortedBy));
     }
 
-    private static StorageFormat fromProto(alluxio.grpc.table.layout.hive.StorageFormat format)
+    private static org.apache.hadoop.hive.metastore.api.FieldSchema fromProto(alluxio.grpc.table.FieldSchema column)
     {
-        return StorageFormat.create(format.getSerde(), format.getInputFormat(), format.getOutputFormat());
-    }
-
-    private static Column fromProto(alluxio.grpc.table.FieldSchema column)
-    {
-        Optional<String> comment = column.hasComment() ? Optional.of(column.getComment()) : Optional.empty();
-        return new Column(column.getName(), HiveType.valueOf(column.getType()), comment);
+        org.apache.hadoop.hive.metastore.api.FieldSchema fs =
+                new org.apache.hadoop.hive.metastore.api.FieldSchema();
+        if (column.hasComment()) {
+            fs.setComment(column.getComment());
+        }
+        fs.setName(column.getName());
+        fs.setType(column.getType());
+        return fs;
     }
 
     public static Partition fromProto(alluxio.grpc.table.layout.hive.PartitionInfo info)
     {
-        Partition.Builder builder = Partition.builder()
-                .setColumns(info.getDataColsList().stream().map(ProtoUtils::fromProto).collect(Collectors.toList()))
-                .setDatabaseName(info.getDbName())
-                .setParameters(info.getParametersMap())
-                .setValues(Lists.newArrayList(info.getValuesList()))
-                .setTableName(info.getTableName());
+        if (!info.hasStorage()) {
+            throw new IllegalArgumentException("PartitionInfo must contain storage information");
+        }
+        Partition part = new Partition();
+        part.setDbName(info.getDbName());
+        part.setTableName(info.getTableName());
+        part.setParameters(info.getParametersMap());
+        part.setValues(info.getValuesList());
+        StorageDescriptor sd = fromProto(info.getStorage());
+        sd.setCols(info.getDataColsList().stream().map(ProtoUtils::fromProto).collect(Collectors.toList()));
+        part.setSd(sd);
 
-        builder.getStorageBuilder()
-                .setSkewed(info.getStorage().getSkewed())
-                .setStorageFormat(fromProto(info.getStorage().getStorageFormat()))
-                .setLocation(info.getStorage().getLocation())
-                .setBucketProperty(info.getStorage().hasBucketProperty()
-                    ? fromProto(info.getStorage().getBucketProperty()) : Optional.empty())
-                .setSerdeParameters(info.getStorage().getStorageFormat().getSerdelibParametersMap());
+        return part;
+    }
 
-        return builder.build();
+    public static StorageDescriptor fromProto(Storage storage)
+    {
+        StorageDescriptor sd = new StorageDescriptor();
+        // Set columns
+        sd.setLocation(storage.getLocation());
+        sd.setInputFormat(storage.getStorageFormat().getInputFormat());
+        sd.setOutputFormat(storage.getStorageFormat().getOutputFormat());
+        if (storage.hasBucketProperty()) {
+            sd.setBucketCols(storage.getBucketProperty().getBucketedByList());
+            sd.setNumBuckets(storage.getBucketProperty().getBucketedByCount());
+        }
+        SerDeInfo si = new SerDeInfo();
+        si.setName(storage.getStorageFormat().getSerde());
+        si.setParameters(storage.getStorageFormat().getSerdelibParametersMap());
+        sd.setSerdeInfo(si);
+        SkewedInfo skewInfo = new SkewedInfo();
+        sd.setSkewedInfo(skewInfo);
+        return sd;
     }
 
     public static alluxio.grpc.table.layout.hive.PartitionInfo toPartitionInfo(alluxio.grpc.table.Partition part)
