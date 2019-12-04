@@ -1,0 +1,843 @@
+diff --git a/pom.xml b/pom.xml
+index 4266c3cf39..fb12b52e25 100644
+--- a/pom.xml
++++ b/pom.xml
+@@ -62,6 +62,7 @@
+         <dep.nexus-staging-plugin.version>1.6.8</dep.nexus-staging-plugin.version>
+         <dep.asm.version>6.2.1</dep.asm.version>
+         <dep.gcs.version>1.9.17</dep.gcs.version>
++        <dep.alluxio.version>2.1.0</dep.alluxio.version>
+ 
+         <!--
+           America/Bahia_Banderas has:
+@@ -95,6 +96,7 @@
+         <module>presto-parquet</module>
+         <module>presto-rcfile</module>
+         <module>presto-hive</module>
++        <module>presto-hive-alluxio</module>
+         <module>presto-hive-hadoop2</module>
+         <module>presto-hive-metastore</module>
+         <module>presto-teradata-functions</module>
+@@ -149,6 +151,34 @@
+ 
+     <dependencyManagement>
+         <dependencies>
++            <dependency>
++              <groupId>org.alluxio</groupId>
++              <artifactId>alluxio-shaded-client</artifactId>
++              <version>${dep.alluxio.version}</version>
++              <exclusions>
++                  <exclusion>
++                      <groupId>org.slf4j</groupId>
++                      <artifactId>slf4j-api</artifactId>
++                  </exclusion>
++                  <exclusion>
++                      <groupId>org.slf4j</groupId>
++                      <artifactId>slf4j-log4j12</artifactId>
++                  </exclusion>
++                  <exclusion>
++                      <groupId>org.slf4j</groupId>
++                      <artifactId>slf4j-jdk14</artifactId>
++                  </exclusion>
++                  <exclusion>
++                      <groupId>log4j</groupId>
++                      <artifactId>log4j</artifactId>
++                  </exclusion>
++                  <exclusion>
++                      <groupId>commons-logging</groupId>
++                      <artifactId>commons-logging</artifactId>
++                  </exclusion>
++              </exclusions>
++            </dependency>
++
+             <dependency>
+                 <groupId>com.facebook.presto</groupId>
+                 <artifactId>presto-testing-docker</artifactId>
+@@ -1373,6 +1403,7 @@
+                             <requireUpperBoundDeps>
+                                 <excludes combine.children="append">
+                                     <!-- TODO: fix this in Airlift resolver -->
++                                    <exclude>org.alluxio:alluxio-shaded-client</exclude>
+                                     <exclude>org.codehaus.plexus:plexus-utils</exclude>
+                                     <exclude>com.google.guava:guava</exclude>
+                                 </excludes>
+diff --git a/presto-hive-alluxio/pom.xml b/presto-hive-alluxio/pom.xml
+new file mode 100644
+index 0000000000..b0e1783d61
+--- /dev/null
++++ b/presto-hive-alluxio/pom.xml
+@@ -0,0 +1,64 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
++    <modelVersion>4.0.0</modelVersion>
++
++    <parent>
++        <groupId>com.facebook.presto</groupId>
++        <artifactId>presto-root</artifactId>
++        <version>0.230-SNAPSHOT</version>
++    </parent>
++
++    <artifactId>presto-hive-alluxio</artifactId>
++    <description>Presto - Hive Connector - Alluxio</description>
++    <packaging>presto-plugin</packaging>
++
++    <properties>
++        <air.main.basedir>${project.parent.basedir}</air.main.basedir>
++    </properties>
++
++    <dependencies>
++        <dependency>
++            <groupId>com.facebook.presto</groupId>
++            <artifactId>presto-hive</artifactId>
++            <exclusions>
++                <exclusion>
++                    <groupId>org.apache.parquet</groupId>
++                    <artifactId>parquet-format</artifactId>
++                </exclusion>
++            </exclusions>
++        </dependency>
++
++        <!-- Presto SPI -->
++        <dependency>
++            <groupId>com.facebook.presto</groupId>
++            <artifactId>presto-spi</artifactId>
++            <scope>provided</scope>
++        </dependency>
++
++        <dependency>
++            <groupId>io.airlift</groupId>
++            <artifactId>slice</artifactId>
++            <scope>provided</scope>
++        </dependency>
++
++        <dependency>
++            <groupId>io.airlift</groupId>
++            <artifactId>units</artifactId>
++            <scope>provided</scope>
++        </dependency>
++
++        <dependency>
++            <groupId>com.fasterxml.jackson.core</groupId>
++            <artifactId>jackson-annotations</artifactId>
++            <scope>provided</scope>
++        </dependency>
++
++        <dependency>
++            <groupId>org.openjdk.jol</groupId>
++            <artifactId>jol-core</artifactId>
++            <scope>provided</scope>
++        </dependency>
++
++    </dependencies>
++
++</project>
+\ No newline at end of file
+diff --git a/presto-hive-alluxio/src/main/java/com/facebook/presto/plugin/hive/HiveAlluxioPlugin.java b/presto-hive-alluxio/src/main/java/com/facebook/presto/plugin/hive/HiveAlluxioPlugin.java
+new file mode 100644
+index 0000000000..a085d9de68
+--- /dev/null
++++ b/presto-hive-alluxio/src/main/java/com/facebook/presto/plugin/hive/HiveAlluxioPlugin.java
+@@ -0,0 +1,25 @@
++/*
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package com.facebook.presto.plugin.hive;
++
++import com.facebook.presto.hive.HivePlugin;
++
++public class HiveAlluxioPlugin
++        extends HivePlugin
++{
++    public HiveAlluxioPlugin()
++    {
++        super("hive-alluxio");
++    }
++}
+diff --git a/presto-hive-metastore/pom.xml b/presto-hive-metastore/pom.xml
+index d4c647b8f7..4ddcc615e0 100644
+--- a/presto-hive-metastore/pom.xml
++++ b/presto-hive-metastore/pom.xml
+@@ -16,6 +16,11 @@
+     </properties>
+ 
+     <dependencies>
++        <dependency>
++            <groupId>org.alluxio</groupId>
++            <artifactId>alluxio-shaded-client</artifactId>
++        </dependency>
++
+         <dependency>
+             <groupId>com.facebook.presto</groupId>
+             <artifactId>presto-spi</artifactId>
+diff --git a/presto-hive-metastore/src/main/java/com/facebook/presto/hive/metastore/alluxio/AlluxioHiveMetastore.java b/presto-hive-metastore/src/main/java/com/facebook/presto/hive/metastore/alluxio/AlluxioHiveMetastore.java
+new file mode 100644
+index 0000000000..4d8d447f0f
+--- /dev/null
++++ b/presto-hive-metastore/src/main/java/com/facebook/presto/hive/metastore/alluxio/AlluxioHiveMetastore.java
+@@ -0,0 +1,356 @@
++/*
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package com.facebook.presto.hive.metastore.alluxio;
++
++import alluxio.client.table.TableMasterClient;
++import alluxio.exception.status.AlluxioStatusException;
++import alluxio.grpc.table.Constraint;
++import alluxio.grpc.table.layout.hive.PartitionInfo;
++import com.facebook.presto.hive.HiveBasicStatistics;
++import com.facebook.presto.hive.metastore.HivePrivilegeInfo;
++import com.facebook.presto.hive.metastore.PartitionStatistics;
++import com.facebook.presto.hive.metastore.PartitionWithStatistics;
++import com.facebook.presto.hive.metastore.thrift.HiveMetastore;
++import com.facebook.presto.hive.metastore.thrift.ThriftMetastoreUtil;
++import com.facebook.presto.spi.NotFoundException;
++import com.facebook.presto.spi.PrestoException;
++import com.facebook.presto.spi.security.PrestoPrincipal;
++import com.facebook.presto.spi.security.RoleGrant;
++import com.facebook.presto.spi.statistics.ColumnStatisticType;
++import com.facebook.presto.spi.type.Type;
++import com.google.inject.Inject;
++import org.apache.hadoop.hive.metastore.api.Database;
++import org.apache.hadoop.hive.metastore.api.Partition;
++import org.apache.hadoop.hive.metastore.api.Table;
++
++import java.util.Collections;
++import java.util.List;
++import java.util.Map;
++import java.util.Optional;
++import java.util.Set;
++import java.util.function.Function;
++import java.util.stream.Collectors;
++
++import static com.facebook.presto.hive.MetastoreErrorCode.HIVE_METASTORE_ERROR;
++import static java.util.function.Function.identity;
++
++/**
++ * Implementation of the {@link HiveMetastore} interface through Alluxio.
++ */
++public class AlluxioHiveMetastore
++        implements HiveMetastore
++{
++    private TableMasterClient client;
++
++    @Inject
++    public AlluxioHiveMetastore(TableMasterClient client)
++    {
++        this.client = client;
++    }
++
++    @Override
++    public Optional<Database> getDatabase(String databaseName)
++    {
++        try {
++            return Optional.of(ProtoUtils.fromProto(client.getDatabase(databaseName)));
++        }
++        catch (AlluxioStatusException e) {
++            throw new PrestoException(HIVE_METASTORE_ERROR, e);
++        }
++    }
++
++    @Override
++    public List<String> getAllDatabases()
++    {
++        try {
++            return client.getAllDatabases();
++        }
++        catch (AlluxioStatusException e) {
++            throw new PrestoException(HIVE_METASTORE_ERROR, e);
++        }
++    }
++
++    @Override
++    public Optional<Table> getTable(String databaseName, String tableName)
++    {
++        try {
++            return Optional.of(ProtoUtils.fromProto(client.getTable(databaseName, tableName)));
++        }
++        catch (NotFoundException e) {
++            return Optional.empty();
++        }
++        catch (AlluxioStatusException e) {
++            throw new PrestoException(HIVE_METASTORE_ERROR, e);
++        }
++    }
++
++    @Override
++    public Set<ColumnStatisticType> getSupportedColumnStatistics(Type type)
++    {
++        throw new UnsupportedOperationException("getSupportedColumnStatistics");
++    }
++
++    @Override
++    public PartitionStatistics getTableStatistics(String databaseName, String tableName)
++    {
++        try {
++            Table table = getTable(databaseName, tableName)
++                    .orElseThrow(() -> new PrestoException(HIVE_METASTORE_ERROR,
++                            String.format("Could not retrieve table %s.%s", databaseName, tableName)));
++            HiveBasicStatistics basicStats =
++                    ThriftMetastoreUtil.getHiveBasicStatistics(table.getParameters());
++            // TODO implement logic to populate Map<string, HiveColumnStatistics>
++            return new PartitionStatistics(basicStats, Collections.emptyMap());
++        }
++        catch (Exception e) {
++            throw new PrestoException(HIVE_METASTORE_ERROR, e);
++        }
++    }
++
++    @Override
++    public Map<String, PartitionStatistics> getPartitionStatistics(String databaseName,
++            String tableName, Set<String> partitionNames)
++    {
++        // TODO implement partition statistics
++        // currently returns a map of partitionName to empty statistics to satisfy presto requirements
++        return Collections.unmodifiableMap(
++                partitionNames.stream().collect(Collectors.toMap(identity(), (p) -> PartitionStatistics.empty())));
++    }
++
++    @Override
++    public void updateTableStatistics(String databaseName, String tableName,
++            Function<PartitionStatistics, PartitionStatistics> update)
++    {
++        throw new UnsupportedOperationException("updateTableStatistics");
++    }
++
++    @Override
++    public void updatePartitionStatistics(String databaseName, String tableName,
++            String partitionName, Function<PartitionStatistics, PartitionStatistics> update)
++    {
++        throw new UnsupportedOperationException("updatePartitionStatistics");
++    }
++
++    @Override
++    public Optional<List<String>> getAllTables(String databaseName)
++    {
++        try {
++            return Optional.of(client.getAllTables(databaseName));
++        }
++        catch (AlluxioStatusException e) {
++            throw new PrestoException(HIVE_METASTORE_ERROR, e);
++        }
++    }
++
++    @Override
++    public Optional<List<String>> getAllViews(String databaseName)
++    {
++        // TODO: Add views on the server side
++        return Optional.of(Collections.emptyList());
++    }
++
++    @Override
++    public void createDatabase(Database database)
++    {
++        throw new UnsupportedOperationException("createDatabase");
++    }
++
++    @Override
++    public void dropDatabase(String databaseName)
++    {
++        throw new UnsupportedOperationException("dropDatabase");
++    }
++
++    @Override
++    public void alterDatabase(String databaseName, Database database)
++    {
++        throw new UnsupportedOperationException("alterDatabase");
++    }
++
++    @Override
++    public void createTable(Table table)
++    {
++        throw new UnsupportedOperationException("createTable");
++    }
++
++    @Override
++    public void dropTable(String databaseName, String tableName, boolean deleteData)
++    {
++        throw new UnsupportedOperationException("dropTable");
++    }
++
++    @Override
++    public void alterTable(String databaseName, String tableName, Table table)
++    {
++        throw new UnsupportedOperationException("alterTable");
++    }
++
++    @Override
++    public Optional<org.apache.hadoop.hive.metastore.api.Partition> getPartition(String databaseName, String tableName,
++            List<String> partitionValues)
++    {
++        throw new UnsupportedOperationException("getPartition");
++    }
++
++    @Override
++    public Optional<List<String>> getPartitionNames(String databaseName, String tableName)
++    {
++        throw new UnsupportedOperationException("getPartitionNames");
++    }
++
++    /**
++     * return a list of partition names by which the values of each partition is at least
++     * contained which the {@code parts} argument
++     *
++     * @param databaseName
++     * @param tableName
++     * @param parts        list of values which returned partitions should contain
++     * @return optionally, a list of strings where each entry is in the form of {key}={value}
++     */
++    @Override
++    public Optional<List<String>> getPartitionNamesByParts(String databaseName, String tableName,
++            List<String> parts)
++    {
++        try {
++            List<PartitionInfo> partitionInfos = ProtoUtils.toPartitionInfoList(
++                    client.readTable(databaseName, tableName, Constraint.getDefaultInstance()));
++            // TODO also check for database name equality
++            partitionInfos = partitionInfos.stream().filter(p -> p.getTableName().equals(tableName))
++                    // Filter out any partitions which have values that don't match
++                    .filter(partition -> {
++                        List<String> values = partition.getValuesList();
++                        if (values.size() != parts.size()) {
++                            return false;
++                        }
++                        for (int i = 0; i < values.size(); i++) {
++                            String constraintPart = parts.get(i);
++                            if (!constraintPart.isEmpty() && !values.get(i).equals(constraintPart)) {
++                                return false;
++                            }
++                        }
++                        return true;
++                    })
++                    .collect(Collectors.toList());
++            List<String> partitionNames = partitionInfos.stream().map(PartitionInfo::getPartitionName).collect(Collectors.toList());
++            return Optional.of(partitionNames);
++        }
++        catch (AlluxioStatusException e) {
++            throw new PrestoException(HIVE_METASTORE_ERROR, e);
++        }
++    }
++
++    @Override
++    public List<Partition> getPartitionsByNames(String databaseName,
++            String tableName, List<String> partitionNames)
++    {
++        if (partitionNames.isEmpty()) {
++            return Collections.emptyList();
++        }
++
++        try {
++            // Get all partitions
++            List<PartitionInfo> partitionInfos = ProtoUtils.toPartitionInfoList(
++                    client.readTable(databaseName, tableName, Constraint.getDefaultInstance()));
++            List<Partition> result = partitionInfos.stream()
++                    .filter(p -> p.getTableName().equals(tableName))
++                    .filter(p -> partitionNames.stream().anyMatch(p.getPartitionName()::equals))
++                    .map(ProtoUtils::fromProto)
++                    .collect(Collectors.toList());
++            return Collections.unmodifiableList(result);
++        }
++        catch (AlluxioStatusException e) {
++            throw new PrestoException(HIVE_METASTORE_ERROR, e);
++        }
++    }
++
++    @Override
++    public void addPartitions(String databaseName, String tableName,
++            List<PartitionWithStatistics> partitions)
++    {
++        throw new UnsupportedOperationException("addPartitions");
++    }
++
++    @Override
++    public void dropPartition(String databaseName, String tableName, List<String> parts,
++            boolean deleteData)
++    {
++        throw new UnsupportedOperationException("dropPartition");
++    }
++
++    @Override
++    public void alterPartition(String databaseName, String tableName,
++            PartitionWithStatistics partition)
++    {
++        throw new UnsupportedOperationException("alterPartition");
++    }
++
++    @Override
++    public void createRole(String role, String grantor)
++    {
++        throw new UnsupportedOperationException("createRole");
++    }
++
++    @Override
++    public void dropRole(String role)
++    {
++        throw new UnsupportedOperationException("dropRole");
++    }
++
++    @Override
++    public Set<String> listRoles()
++    {
++        throw new UnsupportedOperationException("listRoles");
++    }
++
++    @Override
++    public void grantRoles(Set<String> roles, Set<PrestoPrincipal> grantees,
++            boolean withAdminOption, PrestoPrincipal grantor)
++    {
++        throw new UnsupportedOperationException("grantRoles");
++    }
++
++    @Override
++    public void revokeRoles(Set<String> roles, Set<PrestoPrincipal> grantees,
++            boolean adminOptionFor, PrestoPrincipal grantor)
++    {
++        throw new UnsupportedOperationException("revokeRoles");
++    }
++
++    @Override
++    public Set<RoleGrant> listRoleGrants(PrestoPrincipal principal)
++    {
++        throw new UnsupportedOperationException("listRoleGrants");
++    }
++
++    @Override
++    public void grantTablePrivileges(String databaseName, String tableName, PrestoPrincipal grantee,
++            Set<HivePrivilegeInfo> privileges)
++    {
++        throw new UnsupportedOperationException("grantTablePrivileges");
++    }
++
++    @Override
++    public void revokeTablePrivileges(String databaseName, String tableName,
++            PrestoPrincipal grantee, Set<HivePrivilegeInfo> privileges)
++    {
++        throw new UnsupportedOperationException("revokeTablePrivileges");
++    }
++
++    @Override
++    public Set<HivePrivilegeInfo> listTablePrivileges(String databaseName, String tableName,
++            PrestoPrincipal principal)
++    {
++        throw new UnsupportedOperationException("listTablePrivileges");
++    }
++}
+diff --git a/presto-hive-metastore/src/main/java/com/facebook/presto/hive/metastore/alluxio/AlluxioHiveMetastoreConfig.java b/presto-hive-metastore/src/main/java/com/facebook/presto/hive/metastore/alluxio/AlluxioHiveMetastoreConfig.java
+new file mode 100644
+index 0000000000..c624d8e94c
+--- /dev/null
++++ b/presto-hive-metastore/src/main/java/com/facebook/presto/hive/metastore/alluxio/AlluxioHiveMetastoreConfig.java
+@@ -0,0 +1,38 @@
++/*
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package com.facebook.presto.hive.metastore.alluxio;
++
++import com.facebook.airlift.configuration.Config;
++import com.facebook.airlift.configuration.ConfigDescription;
++
++/**
++ * Configuration for the Alluxio compatible hive metastore interface.
++ */
++public class AlluxioHiveMetastoreConfig
++{
++    private String masterAddress;
++
++    public String getMasterAddress()
++    {
++        return masterAddress;
++    }
++
++    @Config("hive.metastore.alluxio.master.address")
++    @ConfigDescription("Alluxio master address")
++    public AlluxioHiveMetastoreConfig setMasterAddress(String masterAddress)
++    {
++        this.masterAddress = masterAddress;
++        return this;
++    }
++}
+diff --git a/presto-hive-metastore/src/main/java/com/facebook/presto/hive/metastore/alluxio/AlluxioMetastoreModule.java b/presto-hive-metastore/src/main/java/com/facebook/presto/hive/metastore/alluxio/AlluxioMetastoreModule.java
+new file mode 100644
+index 0000000000..2199c074b1
+--- /dev/null
++++ b/presto-hive-metastore/src/main/java/com/facebook/presto/hive/metastore/alluxio/AlluxioMetastoreModule.java
+@@ -0,0 +1,56 @@
++/*
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package io.prestosql.plugin.hive.metastore.alluxio;
++
++import alluxio.ClientContext;
++import alluxio.client.table.RetryHandlingTableMasterClient;
++import alluxio.client.table.TableMasterClient;
++import alluxio.conf.InstancedConfiguration;
++import alluxio.master.MasterClientContext;
++import alluxio.util.ConfigurationUtils;
++import com.facebook.airlift.configuration.AbstractConfigurationAwareModule;
++import com.facebook.presto.hive.metastore.alluxio.AlluxioHiveMetastore;
++import com.facebook.presto.hive.metastore.alluxio.AlluxioHiveMetastoreConfig;
++import com.facebook.presto.hive.metastore.thrift.HiveMetastore;
++import com.google.inject.Binder;
++import com.google.inject.Provides;
++import com.google.inject.Scopes;
++
++import static com.facebook.airlift.configuration.ConfigBinder.configBinder;
++import static org.weakref.jmx.ObjectNames.generatedNameOf;
++import static org.weakref.jmx.guice.ExportBinder.newExporter;
++
++/**
++ * Module for an Alluxio metastore implementation of the {@link HiveMetastore} interface.
++ */
++public class AlluxioMetastoreModule
++         extends AbstractConfigurationAwareModule
++{
++    @Override
++    protected void setup(Binder binder)
++    {
++        configBinder(binder).bindConfig(AlluxioHiveMetastoreConfig.class);
++
++        binder.bind(HiveMetastore.class).to(AlluxioHiveMetastore.class).in(Scopes.SINGLETON);
++        newExporter(binder).export(HiveMetastore.class).as(generatedNameOf(AlluxioHiveMetastore.class));
++    }
++
++    @Provides
++    TableMasterClient provideCatalogMasterClient()
++    {
++        MasterClientContext context = MasterClientContext
++                .newBuilder(ClientContext.create(new InstancedConfiguration(ConfigurationUtils.defaults()))).build();
++        return new RetryHandlingTableMasterClient(context);
++    }
++}
+diff --git a/presto-hive-metastore/src/main/java/com/facebook/presto/hive/metastore/alluxio/ProtoUtils.java b/presto-hive-metastore/src/main/java/com/facebook/presto/hive/metastore/alluxio/ProtoUtils.java
+new file mode 100644
+index 0000000000..64908658d3
+--- /dev/null
++++ b/presto-hive-metastore/src/main/java/com/facebook/presto/hive/metastore/alluxio/ProtoUtils.java
+@@ -0,0 +1,164 @@
++/*
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *     http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package com.facebook.presto.hive.metastore.alluxio;
++
++import alluxio.grpc.table.Layout;
++import alluxio.grpc.table.layout.hive.PartitionInfo;
++import alluxio.grpc.table.layout.hive.Storage;
++import alluxio.shaded.client.com.google.protobuf.InvalidProtocolBufferException;
++import com.facebook.presto.hive.HiveBucketProperty;
++import com.facebook.presto.hive.metastore.SortingColumn;
++import org.apache.hadoop.hive.metastore.api.Database;
++import org.apache.hadoop.hive.metastore.api.Partition;
++import org.apache.hadoop.hive.metastore.api.SerDeInfo;
++import org.apache.hadoop.hive.metastore.api.SkewedInfo;
++import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
++import org.apache.hadoop.hive.metastore.api.Table;
++
++import java.util.List;
++import java.util.Optional;
++import java.util.stream.Collectors;
++
++public class ProtoUtils
++{
++    private ProtoUtils() {}
++
++    public static Database fromProto(alluxio.grpc.table.Database db)
++    {
++        Database database = new Database();
++        database.setName(db.getDbName());
++        database.setLocationUri(db.getLocation());
++        return database;
++    }
++
++    public static Table fromProto(alluxio.grpc.table.TableInfo table)
++    {
++        if (!table.hasLayout()) {
++            throw new UnsupportedOperationException("Unsupported table metadata. missing layout.");
++        }
++        Layout layout = table.getLayout();
++        if (!alluxio.table.ProtoUtils.isHiveLayout(layout)) {
++            throw new UnsupportedOperationException("Unsupported table layout: " + layout);
++        }
++        try {
++            Table tbl = new org.apache.hadoop.hive.metastore.api.Table();
++
++            PartitionInfo partitionInfo = alluxio.table.ProtoUtils.toHiveLayout(layout);
++
++            // compute the data columns
++            tbl.setDbName(table.getDbName());
++            tbl.setTableName(table.getTableName());
++            tbl.setOwner(table.getOwner());
++            tbl.setTableType(table.getType().toString());
++
++            tbl.setParameters(table.getParametersMap());
++
++            alluxio.grpc.table.layout.hive.Storage storage = partitionInfo.getStorage();
++            StorageDescriptor sd = fromProto(storage);
++            // Set columns
++            sd.setCols(table.getSchema().getColsList().stream().map(ProtoUtils::fromProto)
++                    .collect(Collectors.toList()));
++            tbl.setSd(sd);
++            return tbl;
++        }
++        catch (InvalidProtocolBufferException e) {
++            throw new IllegalArgumentException("Failed to extract PartitionInfo from TableInfo", e);
++        }
++    }
++
++    private static SortingColumn fromProto(alluxio.grpc.table.layout.hive.SortingColumn column)
++    {
++        if (column.getOrder().equals(alluxio.grpc.table.layout.hive.SortingColumn.SortingOrder.ASCENDING)) {
++            return new SortingColumn(column.getColumnName(), SortingColumn.Order.ASCENDING);
++        }
++        if (column.getOrder().equals(alluxio.grpc.table.layout.hive.SortingColumn.SortingOrder.DESCENDING)) {
++            return new SortingColumn(column.getColumnName(), SortingColumn.Order.DESCENDING);
++        }
++        throw new IllegalArgumentException("Invalid sort order: " + column.getOrder());
++    }
++
++    private static Optional<HiveBucketProperty> fromProto(alluxio.grpc.table.layout.hive.HiveBucketProperty property)
++    {
++        // must return empty if buckets <= 0
++        if (!property.hasBucketCount() || property.getBucketCount() <= 0) {
++            return Optional.empty();
++        }
++        List<SortingColumn> sortedBy = property.getSortedByList().stream().map(ProtoUtils::fromProto).collect(Collectors.toList());
++        return Optional.of(new HiveBucketProperty(property.getBucketedByList(), (int) property.getBucketCount(), sortedBy));
++    }
++
++    private static org.apache.hadoop.hive.metastore.api.FieldSchema fromProto(alluxio.grpc.table.FieldSchema column)
++    {
++        org.apache.hadoop.hive.metastore.api.FieldSchema fs =
++                new org.apache.hadoop.hive.metastore.api.FieldSchema();
++        if (column.hasComment()) {
++            fs.setComment(column.getComment());
++        }
++        fs.setName(column.getName());
++        fs.setType(column.getType());
++        return fs;
++    }
++
++    public static Partition fromProto(alluxio.grpc.table.layout.hive.PartitionInfo info)
++    {
++        if (!info.hasStorage()) {
++            throw new IllegalArgumentException("PartitionInfo must contain storage information");
++        }
++        Partition part = new Partition();
++        part.setDbName(info.getDbName());
++        part.setTableName(info.getTableName());
++        part.setParameters(info.getParametersMap());
++        part.setValues(info.getValuesList());
++        StorageDescriptor sd = fromProto(info.getStorage());
++        sd.setCols(info.getDataColsList().stream().map(ProtoUtils::fromProto).collect(Collectors.toList()));
++        part.setSd(sd);
++
++        return part;
++    }
++
++    public static StorageDescriptor fromProto(Storage storage)
++    {
++        StorageDescriptor sd = new StorageDescriptor();
++        // Set columns
++        sd.setLocation(storage.getLocation());
++        sd.setInputFormat(storage.getStorageFormat().getInputFormat());
++        sd.setOutputFormat(storage.getStorageFormat().getOutputFormat());
++        if (storage.hasBucketProperty()) {
++            sd.setBucketCols(storage.getBucketProperty().getBucketedByList());
++            sd.setNumBuckets(storage.getBucketProperty().getBucketedByCount());
++        }
++        SerDeInfo si = new SerDeInfo();
++        si.setName(storage.getStorageFormat().getSerde());
++        si.setParameters(storage.getStorageFormat().getSerdelibParametersMap());
++        sd.setSerdeInfo(si);
++        SkewedInfo skewInfo = new SkewedInfo();
++        sd.setSkewedInfo(skewInfo);
++        return sd;
++    }
++
++    public static alluxio.grpc.table.layout.hive.PartitionInfo toPartitionInfo(alluxio.grpc.table.Partition part)
++    {
++        try {
++            return alluxio.table.ProtoUtils.extractHiveLayout(part);
++        }
++        catch (InvalidProtocolBufferException e) {
++            throw new IllegalArgumentException("Failed to extract PartitionInfo", e);
++        }
++    }
++
++    public static List<alluxio.grpc.table.layout.hive.PartitionInfo> toPartitionInfoList(List<alluxio.grpc.table.Partition> parts)
++    {
++        return parts.stream().map(ProtoUtils::toPartitionInfo).collect(Collectors.toList());
++    }
++}
+diff --git a/presto-server/src/main/assembly/presto.xml b/presto-server/src/main/assembly/presto.xml
+index 7df731e7e3..08f9ff07fe 100644
+--- a/presto-server/src/main/assembly/presto.xml
++++ b/presto-server/src/main/assembly/presto.xml
+@@ -11,7 +11,7 @@
+             <source>NOTICE</source>
+         </file>
+     </files>
+-    
++
+     <dependencySets>
+         <!-- lib -->
+         <dependencySet>
+@@ -84,6 +84,10 @@
+             <directory>${project.build.directory}/dependency/presto-hive-hadoop2-${project.version}</directory>
+             <outputDirectory>plugin/hive-hadoop2</outputDirectory>
+         </fileSet>
++        <fileSet>
++            <directory>${project.build.directory}/dependency/presto-hive-alluxio-${project.version}</directory>
++            <outputDirectory>plugin/hive-alluxio</outputDirectory>
++        </fileSet>
+         <fileSet>
+             <directory>${project.build.directory}/dependency/presto-memory-${project.version}</directory>
+             <outputDirectory>plugin/memory</outputDirectory>
