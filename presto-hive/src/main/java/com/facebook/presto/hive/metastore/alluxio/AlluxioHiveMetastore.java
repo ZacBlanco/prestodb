@@ -18,9 +18,15 @@ import alluxio.exception.status.AlluxioStatusException;
 import alluxio.grpc.table.Constraint;
 import alluxio.grpc.table.layout.hive.PartitionInfo;
 import com.facebook.presto.hive.HiveBasicStatistics;
+import com.facebook.presto.hive.HiveType;
 import com.facebook.presto.hive.PartitionStatistics;
+import com.facebook.presto.hive.metastore.Database;
+import com.facebook.presto.hive.metastore.ExtendedHiveMetastore;
 import com.facebook.presto.hive.metastore.HivePrivilegeInfo;
+import com.facebook.presto.hive.metastore.Partition;
 import com.facebook.presto.hive.metastore.PartitionWithStatistics;
+import com.facebook.presto.hive.metastore.PrincipalPrivileges;
+import com.facebook.presto.hive.metastore.Table;
 import com.facebook.presto.hive.metastore.thrift.HiveMetastore;
 import com.facebook.presto.hive.metastore.thrift.ThriftMetastoreUtil;
 import com.facebook.presto.spi.NotFoundException;
@@ -30,9 +36,6 @@ import com.facebook.presto.spi.security.RoleGrant;
 import com.facebook.presto.spi.statistics.ColumnStatisticType;
 import com.facebook.presto.spi.type.Type;
 import com.google.inject.Inject;
-import org.apache.hadoop.hive.metastore.api.Database;
-import org.apache.hadoop.hive.metastore.api.Partition;
-import org.apache.hadoop.hive.metastore.api.Table;
 
 import java.util.Collections;
 import java.util.List;
@@ -49,7 +52,7 @@ import static java.util.function.Function.identity;
  * Implementation of the {@link HiveMetastore} interface through Alluxio.
  */
 public class AlluxioHiveMetastore
-        implements HiveMetastore
+        implements ExtendedHiveMetastore
 {
     private TableMasterClient client;
 
@@ -173,13 +176,13 @@ public class AlluxioHiveMetastore
     }
 
     @Override
-    public void alterDatabase(String databaseName, Database database)
+    public void renameDatabase(String databaseName, String newDatabaseName)
     {
-        throw new UnsupportedOperationException("alterDatabase");
+        throw new UnsupportedOperationException("renameDatabase");
     }
 
     @Override
-    public void createTable(Table table)
+    public void createTable(Table table, PrincipalPrivileges principalPrivileges)
     {
         throw new UnsupportedOperationException("createTable");
     }
@@ -191,13 +194,37 @@ public class AlluxioHiveMetastore
     }
 
     @Override
-    public void alterTable(String databaseName, String tableName, Table table)
+    public void replaceTable(String databaseName, String tableName, Table newTable, PrincipalPrivileges principalPrivileges)
     {
-        throw new UnsupportedOperationException("alterTable");
+        throw new UnsupportedOperationException("replaceTable");
     }
 
     @Override
-    public Optional<org.apache.hadoop.hive.metastore.api.Partition> getPartition(String databaseName, String tableName,
+    public void renameTable(String databaseName, String tableName, String newDatabaseName, String newTableName)
+    {
+        throw new UnsupportedOperationException("renameTable");
+    }
+
+    @Override
+    public void addColumn(String databaseName, String tableName, String columnName, HiveType columnType, String columnComment)
+    {
+        throw new UnsupportedOperationException("addColumn");
+    }
+
+    @Override
+    public void renameColumn(String databaseName, String tableName, String oldColumnName, String newColumnName)
+    {
+        throw new UnsupportedOperationException("renameColumn");
+    }
+
+    @Override
+    public void dropColumn(String databaseName, String tableName, String columnName)
+    {
+        throw new UnsupportedOperationException("dropColumn");
+    }
+
+    @Override
+    public Optional<Partition> getPartition(String databaseName, String tableName,
             List<String> partitionValues)
     {
         throw new UnsupportedOperationException("getPartition");
@@ -251,23 +278,27 @@ public class AlluxioHiveMetastore
     }
 
     @Override
-    public List<Partition> getPartitionsByNames(String databaseName,
+    public Map<String, Optional<Partition>> getPartitionsByNames(String databaseName,
             String tableName, List<String> partitionNames)
     {
         if (partitionNames.isEmpty()) {
-            return Collections.emptyList();
+            return Collections.emptyMap();
         }
 
         try {
             // Get all partitions
             List<PartitionInfo> partitionInfos = ProtoUtils.toPartitionInfoList(
                     client.readTable(databaseName, tableName, Constraint.getDefaultInstance()));
-            List<Partition> result = partitionInfos.stream()
-                    .filter(p -> p.getTableName().equals(tableName))
-                    .filter(p -> partitionNames.stream().anyMatch(p.getPartitionName()::equals))
-                    .map(ProtoUtils::fromProto)
+            // Check that table name is correct
+            // TODO also check for database name equality
+            partitionInfos = partitionInfos.stream().filter(p -> p.getTableName().equals(tableName))
                     .collect(Collectors.toList());
-            return Collections.unmodifiableList(result);
+            Map<String, Optional<Partition>> result = partitionInfos.stream()
+                    .filter(p -> partitionNames.stream().anyMatch(p.getPartitionName()::equals))
+                    .collect(Collectors.toMap(
+                            PartitionInfo::getPartitionName,
+                            pi -> Optional.of(ProtoUtils.fromProto(pi))));
+            return Collections.unmodifiableMap(result);
         }
         catch (AlluxioStatusException e) {
             throw new PrestoException(HIVE_METASTORE_ERROR, e);

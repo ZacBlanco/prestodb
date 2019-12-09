@@ -17,17 +17,21 @@ import alluxio.ClientContext;
 import alluxio.client.table.RetryHandlingTableMasterClient;
 import alluxio.client.table.TableMasterClient;
 import alluxio.conf.InstancedConfiguration;
+import alluxio.conf.PropertyKey;
 import alluxio.master.MasterClientContext;
 import alluxio.util.ConfigurationUtils;
+import com.facebook.presto.hive.metastore.ExtendedHiveMetastore;
 import com.facebook.presto.hive.metastore.alluxio.AlluxioHiveMetastore;
 import com.facebook.presto.hive.metastore.alluxio.AlluxioHiveMetastoreConfig;
 import com.facebook.presto.hive.metastore.thrift.HiveMetastore;
 import com.google.inject.Binder;
+import com.google.inject.Inject;
 import com.google.inject.Provides;
 import com.google.inject.Scopes;
 import io.airlift.configuration.AbstractConfigurationAwareModule;
 
 import static io.airlift.configuration.ConfigBinder.configBinder;
+import static java.util.Objects.requireNonNull;
 import static org.weakref.jmx.ObjectNames.generatedNameOf;
 import static org.weakref.jmx.guice.ExportBinder.newExporter;
 
@@ -37,20 +41,34 @@ import static org.weakref.jmx.guice.ExportBinder.newExporter;
 public class AlluxioMetastoreModule
         extends AbstractConfigurationAwareModule
 {
+    private final String connectorId;
+
+    public AlluxioMetastoreModule(String connectorId)
+    {
+        this.connectorId = requireNonNull(connectorId, "connectorId is null");
+    }
+
     @Override
     protected void setup(Binder binder)
     {
         configBinder(binder).bindConfig(AlluxioHiveMetastoreConfig.class);
-
-        binder.bind(HiveMetastore.class).to(AlluxioHiveMetastore.class).in(Scopes.SINGLETON);
-        newExporter(binder).export(HiveMetastore.class).as(generatedNameOf(AlluxioHiveMetastore.class));
+        binder.bind(ExtendedHiveMetastore.class).to(AlluxioHiveMetastore.class).in(Scopes.SINGLETON);
+        newExporter(binder).export(ExtendedHiveMetastore.class).as(generatedNameOf(AlluxioHiveMetastore.class));
     }
 
     @Provides
-    TableMasterClient provideCatalogMasterClient()
+    @Inject
+    TableMasterClient provideCatalogMasterClient(AlluxioHiveMetastoreConfig config)
     {
+        InstancedConfiguration conf = new InstancedConfiguration(ConfigurationUtils.defaults());
+        String addr = config.getMasterAddress();
+        String[] parts = addr.split(":", 2);
+        conf.set(PropertyKey.MASTER_HOSTNAME, parts[0]);
+        if (parts.length > 1) {
+            conf.set(PropertyKey.MASTER_RPC_PORT, parts[1]);
+        }
         MasterClientContext context = MasterClientContext
-                .newBuilder(ClientContext.create(new InstancedConfiguration(ConfigurationUtils.defaults()))).build();
+                .newBuilder(ClientContext.create(conf)).build();
         return new RetryHandlingTableMasterClient(context);
     }
 }

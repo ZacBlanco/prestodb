@@ -19,6 +19,7 @@ import com.facebook.presto.hive.metastore.thrift.ThriftMetastoreModule;
 import com.google.inject.Binder;
 import com.google.inject.Module;
 import io.airlift.configuration.AbstractConfigurationAwareModule;
+import io.prestosql.plugin.hive.metastore.alluxio.AlluxioMetastoreModule;
 
 import java.util.Optional;
 
@@ -46,6 +47,7 @@ public class HiveMetastoreModule
             bindMetastoreModule("thrift", new ThriftMetastoreModule(connectorId));
             bindMetastoreModule("file", new FileMetastoreModule(connectorId));
             bindMetastoreModule("glue", new GlueMetastoreModule(connectorId));
+            bindMetastoreModule("alluxio", new AlluxioMetastoreModule(connectorId));
         }
     }
 
