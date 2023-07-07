@@ -13,9 +13,13 @@
  */
 package com.facebook.presto.iceberg;
 
+import com.facebook.airlift.log.Logger;
 import com.facebook.presto.common.predicate.NullableValue;
 import com.facebook.presto.common.predicate.TupleDomain;
 import com.facebook.presto.common.type.TypeManager;
+import com.facebook.presto.hive.HdfsEnvironment;
+import com.facebook.presto.iceberg.samples.SampleUtil;
+import com.facebook.presto.spi.ConnectorSession;
 import com.facebook.presto.spi.Constraint;
 import com.facebook.presto.spi.statistics.ColumnStatistics;
 import com.facebook.presto.spi.statistics.DoubleRange;
@@ -32,6 +36,7 @@ import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.types.Comparators;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
+import org.apache.iceberg.util.SnapshotUtil;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -44,6 +49,7 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import static com.facebook.presto.iceberg.ExpressionConverter.toIcebergExpression;
+import static com.facebook.presto.iceberg.IcebergSessionProperties.useSampleStatistics;
 import static com.facebook.presto.iceberg.IcebergUtil.getColumns;
 import static com.facebook.presto.iceberg.IcebergUtil.getIdentityPartitions;
 import static com.facebook.presto.iceberg.Partition.toMap;
@@ -56,22 +62,52 @@ import static java.util.stream.Collectors.toSet;
 
 public class TableStatisticsMaker
 {
+    private static final Logger LOG = Logger.get(TableStatisticsMaker.class);
     private final TypeManager typeManager;
     private final Table icebergTable;
 
-    private TableStatisticsMaker(TypeManager typeManager, Table icebergTable)
+    private final ConnectorSession session;
+    private final HdfsEnvironment hdfsEnvironment;
+
+    private TableStatisticsMaker(TypeManager typeManager, Table icebergTable, ConnectorSession session, HdfsEnvironment hdfsEnvironment)
     {
         this.typeManager = typeManager;
         this.icebergTable = icebergTable;
+        this.session = session;
+        this.hdfsEnvironment = hdfsEnvironment;
     }
 
-    public static TableStatistics getTableStatistics(TypeManager typeManager, Constraint constraint, IcebergTableHandle tableHandle, Table icebergTable)
+    public static TableStatistics getTableStatistics(TypeManager typeManager, Constraint constraint, IcebergTableHandle tableHandle, Table icebergTable, ConnectorSession session, HdfsEnvironment hdfsEnvironment)
     {
-        return new TableStatisticsMaker(typeManager, icebergTable).makeTableStatistics(tableHandle, constraint);
+        return new TableStatisticsMaker(typeManager, icebergTable, session, hdfsEnvironment).makeTableStatistics(tableHandle, constraint);
     }
 
     private TableStatistics makeTableStatistics(IcebergTableHandle tableHandle, Constraint constraint)
     {
+        Table icebergTable = this.icebergTable;
+        Optional<Long> snapshotId = tableHandle.getSnapshotId();
+        if (tableHandle.getTableType() != TableType.SAMPLES &&
+                IcebergSessionProperties.useSampleStatistics(session) &&
+                SampleUtil.sampleTableExists(icebergTable, tableHandle.getSchemaName(), hdfsEnvironment, session)) {
+            org.apache.iceberg.Table sampleTable = SampleUtil.getSampleTableFromActual(icebergTable, tableHandle.getSchemaName(), hdfsEnvironment, session);
+            final org.apache.iceberg.Table ibt = icebergTable;
+            Optional<Long> tableHandleSnapshotId = tableHandle.getSnapshotId().map((ssid) -> {
+                long time = ibt.snapshot(ssid).timestampMillis();
+                try {
+                    return SnapshotUtil.snapshotIdAsOfTime(sampleTable, time);
+                }
+                catch (IllegalArgumentException e) {
+                    return sampleTable.currentSnapshot().snapshotId();
+                }
+            });
+            LOG.debug("using sample table statistics with snapshotID " + tableHandleSnapshotId);
+            icebergTable = sampleTable;
+            tableHandle = new IcebergTableHandle(tableHandle.getSchemaName(), sampleTable.name(), tableHandle.getTableType(), tableHandleSnapshotId, tableHandle.getPredicate());
+        }
+        if (useSampleStatistics(session) && SampleUtil.sampleTableExists(icebergTable, tableHandle.getSchemaName(), hdfsEnvironment, session)) {
+            icebergTable = SampleUtil.getSampleTableFromActual(icebergTable, tableHandle.getSchemaName(), hdfsEnvironment, session);
+            snapshotId = Optional.of(icebergTable.currentSnapshot().snapshotId());
+        }
         if (!tableHandle.getSnapshotId().isPresent() || constraint.getSummary().isNone()) {
             return TableStatistics.builder()
                     .setRowCount(Estimate.of(0))
@@ -123,7 +159,7 @@ public class TableStatisticsMaker
 
         TableScan tableScan = icebergTable.newScan()
                 .filter(toIcebergExpression(intersection))
-                .useSnapshot(tableHandle.getSnapshotId().get())
+                .useSnapshot(snapshotId.get())
                 .includeColumnStats();
 
         Partition summary = null;

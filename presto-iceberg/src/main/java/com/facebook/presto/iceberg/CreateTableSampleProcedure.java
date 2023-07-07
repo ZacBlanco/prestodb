@@ -25,12 +25,10 @@ import com.facebook.presto.spi.procedure.Procedure;
 import com.google.common.collect.ImmutableList;
 import org.apache.hadoop.fs.Path;
 import org.apache.iceberg.Table;
-import org.apache.iceberg.catalog.TableIdentifier;
 
 import javax.inject.Inject;
 import javax.inject.Provider;
 
-import java.io.IOException;
 import java.lang.invoke.MethodHandle;
 import java.util.HashMap;
 
@@ -39,7 +37,7 @@ import static com.facebook.presto.common.type.StandardTypes.VARCHAR;
 import static com.facebook.presto.iceberg.CatalogType.HADOOP;
 import static com.facebook.presto.iceberg.CatalogType.NESSIE;
 import static com.facebook.presto.iceberg.IcebergUtil.getHiveIcebergTable;
-import static com.facebook.presto.iceberg.samples.SampleUtil.SAMPLE_TABLE_SUFFIX;
+import static com.facebook.presto.iceberg.samples.SampleUtil.SAMPLE_TABLE_ID;
 import static com.facebook.presto.iceberg.util.IcebergPrestoModelConverters.toIcebergTableIdentifier;
 import static java.util.Objects.requireNonNull;
 
@@ -110,14 +108,10 @@ public class CreateTableSampleProcedure
         Path tableLocation = new Path(location);
         HdfsContext context = new HdfsContext(clientSession, schema, table, location, false);
         try (SinglePathCatalog c = new SinglePathCatalog(tableLocation, hdfsEnvironment.getConfiguration(context, tableLocation))) {
-            Path samplePath = new Path(tableLocation, SAMPLE_TABLE_SUFFIX);
+            Path samplePath = new Path(tableLocation, SAMPLE_TABLE_ID.name());
             c.initialize(samplePath.getName(), new HashMap<>());
-            TableIdentifier id = toIcebergTableIdentifier("sample", SAMPLE_TABLE_SUFFIX);
             // create the table for samples and load the table back to make sure it's valid
-            c.createTable(id, icebergTable.schema());
-        }
-        catch (IOException e) {
-            LOG.warn("Failed to create sample table", e);
+            c.createTable(SAMPLE_TABLE_ID, icebergTable.schema());
         }
     }
 }

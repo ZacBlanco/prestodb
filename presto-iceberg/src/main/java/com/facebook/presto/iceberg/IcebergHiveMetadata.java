@@ -384,7 +384,10 @@ public class IcebergHiveMetadata
     {
         IcebergTableHandle handle = (IcebergTableHandle) tableHandle;
         org.apache.iceberg.Table icebergTable = getHiveIcebergTable(metastore, hdfsEnvironment, session, handle.getSchemaTableName());
-        return TableStatisticsMaker.getTableStatistics(typeManager, constraint, handle, icebergTable);
+        if (handle.getTableType() == SAMPLES) {
+            icebergTable = SampleUtil.getSampleTableFromActual(icebergTable, handle.getSchemaName(), hdfsEnvironment, session);
+        }
+        return TableStatisticsMaker.getTableStatistics(typeManager, constraint, handle, icebergTable, session, hdfsEnvironment);
     }
 
     private Optional<Long> getSnapshotId(org.apache.iceberg.Table table, Optional<Long> snapshotId)

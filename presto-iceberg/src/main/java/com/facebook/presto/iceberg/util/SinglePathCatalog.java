@@ -13,6 +13,7 @@
  */
 package com.facebook.presto.iceberg.util;
 
+import com.facebook.presto.spi.PrestoException;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -27,6 +28,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
+import static com.facebook.presto.iceberg.IcebergErrorCode.ICEBERG_FILESYSTEM_ERROR;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -40,7 +42,8 @@ import static java.util.Objects.requireNonNull;
  * no matter the namespace that is provided. You cannot drop or rename the table either.
  */
 public class SinglePathCatalog
-        extends HadoopCatalog implements AutoCloseable
+        extends HadoopCatalog
+        implements AutoCloseable
 {
     private final Path path;
     private final Configuration conf;
@@ -60,9 +63,14 @@ public class SinglePathCatalog
     }
 
     @Override
-    public void close() throws IOException
+    public void close()
     {
-        super.close();
+        try {
+            super.close();
+        }
+        catch (IOException e) {
+            throw new PrestoException(ICEBERG_FILESYSTEM_ERROR, e);
+        }
     }
 
     @Override
