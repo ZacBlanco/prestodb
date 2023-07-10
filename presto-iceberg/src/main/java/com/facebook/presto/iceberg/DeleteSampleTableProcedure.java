@@ -38,13 +38,13 @@ import static com.facebook.presto.iceberg.samples.SampleUtil.SAMPLE_TABLE_ID;
 import static com.facebook.presto.iceberg.util.IcebergPrestoModelConverters.toIcebergTableIdentifier;
 import static java.util.Objects.requireNonNull;
 
-public class CreateSampleTableProcedure
+public class DeleteSampleTableProcedure
         implements Provider<Procedure>
 {
-    private static final Logger LOG = Logger.get(CreateSampleTableProcedure.class);
-    private static final MethodHandle CREATE_SAMPLE_TABLE = methodHandle(
-            CreateSampleTableProcedure.class,
-            "createSampleTable",
+    private static final Logger LOG = Logger.get(DeleteSampleTableProcedure.class);
+    private static final MethodHandle DELETE_SAMPLE_TABLE = methodHandle(
+            DeleteSampleTableProcedure.class,
+            "deleteSampleTable",
             ConnectorSession.class,
             String.class,
             String.class);
@@ -55,7 +55,7 @@ public class CreateSampleTableProcedure
     private final IcebergResourceFactory resourceFactory;
 
     @Inject
-    public CreateSampleTableProcedure(
+    public DeleteSampleTableProcedure(
             IcebergConfig config,
             IcebergMetadataFactory metadataFactory,
             HdfsEnvironment hdfsEnvironment,
@@ -72,11 +72,11 @@ public class CreateSampleTableProcedure
     {
         return new Procedure(
                 "system",
-                "create_sample_table",
+                "delete_sample_table",
                 ImmutableList.of(
                         new Procedure.Argument("schema", VARCHAR),
                         new Procedure.Argument("table", VARCHAR)),
-                CREATE_SAMPLE_TABLE.bindTo(this));
+                DELETE_SAMPLE_TABLE.bindTo(this));
     }
 
     /**
@@ -87,7 +87,7 @@ public class CreateSampleTableProcedure
      * @param schema the schema where the table exists
      * @param table the name of the table to sample from
      */
-    public void createSampleTable(ConnectorSession clientSession, String schema, String table)
+    public void deleteSampleTable(ConnectorSession clientSession, String schema, String table)
     {
         SchemaTableName schemaTableName = new SchemaTableName(schema, table);
         ConnectorMetadata metadata = metadataFactory.create();
@@ -103,7 +103,7 @@ public class CreateSampleTableProcedure
         }
         try (SampleUtil.AutoCloseableCatalog c = SampleUtil.getCatalogForSampleTable(icebergTable, schema, hdfsEnvironment, clientSession)) {
             // create the table for samples and load the table back to make sure it's valid
-            c.createTable(SAMPLE_TABLE_ID, icebergTable.schema());
+            c.dropTable(SAMPLE_TABLE_ID, true);
         }
     }
 }
