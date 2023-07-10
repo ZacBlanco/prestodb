@@ -39,13 +39,13 @@ import static com.facebook.presto.iceberg.samples.SampleUtil.SAMPLE_TABLE_ID;
 import static com.facebook.presto.iceberg.util.IcebergPrestoModelConverters.toIcebergTableIdentifier;
 import static java.util.Objects.requireNonNull;
 
-public class CreateTableSampleProcedure
+public class CreateSampleTableProcedure
         implements Provider<Procedure>
 {
-    private static final Logger LOG = Logger.get(CreateTableSampleProcedure.class);
-    private static final MethodHandle CREATE_TABLE_SAMPLE = methodHandle(
-            CreateTableSampleProcedure.class,
-            "createTableSample",
+    private static final Logger LOG = Logger.get(CreateSampleTableProcedure.class);
+    private static final MethodHandle CREATE_SAMPLE_TABLE = methodHandle(
+            CreateSampleTableProcedure.class,
+            "createSampleTable",
             ConnectorSession.class,
             String.class,
             String.class);
@@ -56,7 +56,7 @@ public class CreateTableSampleProcedure
     private final IcebergResourceFactory resourceFactory;
 
     @Inject
-    public CreateTableSampleProcedure(
+    public CreateSampleTableProcedure(
             IcebergConfig config,
             IcebergMetadataFactory metadataFactory,
             HdfsEnvironment hdfsEnvironment,
@@ -73,11 +73,11 @@ public class CreateTableSampleProcedure
     {
         return new Procedure(
                 "system",
-                "create_table_sample",
+                "create_sample_table",
                 ImmutableList.of(
                         new Procedure.Argument("schema", VARCHAR),
                         new Procedure.Argument("table", VARCHAR)),
-                CREATE_TABLE_SAMPLE.bindTo(this));
+                CREATE_SAMPLE_TABLE.bindTo(this));
     }
 
     /**
@@ -88,7 +88,7 @@ public class CreateTableSampleProcedure
      * @param schema the schema where the table exists
      * @param table the name of the table to sample from
      */
-    public void createTableSample(ConnectorSession clientSession, String schema, String table)
+    public void createSampleTable(ConnectorSession clientSession, String schema, String table)
     {
         SchemaTableName schemaTableName = new SchemaTableName(schema, table);
         ConnectorMetadata metadata = metadataFactory.create();
