@@ -85,9 +85,7 @@ public class TableStatisticsMaker
     private TableStatistics makeTableStatistics(IcebergTableHandle tableHandle, Constraint constraint)
     {
         Table icebergTable = this.icebergTable;
-        Optional<Long> snapshotId = tableHandle.getSnapshotId();
-        if (tableHandle.getTableType() != TableType.SAMPLES &&
-                IcebergSessionProperties.useSampleStatistics(session) &&
+        if (tableHandle.getTableType() != TableType.SAMPLES && useSampleStatistics(session) &&
                 SampleUtil.sampleTableExists(icebergTable, tableHandle.getSchemaName(), hdfsEnvironment, session)) {
             org.apache.iceberg.Table sampleTable = SampleUtil.getSampleTableFromActual(icebergTable, tableHandle.getSchemaName(), hdfsEnvironment, session);
             final org.apache.iceberg.Table ibt = icebergTable;
@@ -104,10 +102,8 @@ public class TableStatisticsMaker
             icebergTable = sampleTable;
             tableHandle = new IcebergTableHandle(tableHandle.getSchemaName(), sampleTable.name(), tableHandle.getTableType(), tableHandleSnapshotId, tableHandle.getPredicate());
         }
-        if (useSampleStatistics(session) && SampleUtil.sampleTableExists(icebergTable, tableHandle.getSchemaName(), hdfsEnvironment, session)) {
-            icebergTable = SampleUtil.getSampleTableFromActual(icebergTable, tableHandle.getSchemaName(), hdfsEnvironment, session);
-            snapshotId = Optional.of(icebergTable.currentSnapshot().snapshotId());
-        }
+        Optional<Long> snapshotId = tableHandle.getSnapshotId();
+
         if (!tableHandle.getSnapshotId().isPresent() || constraint.getSummary().isNone()) {
             return TableStatistics.builder()
                     .setRowCount(Estimate.of(0))

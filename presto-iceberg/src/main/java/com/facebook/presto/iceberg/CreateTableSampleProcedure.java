@@ -14,10 +14,9 @@
 package com.facebook.presto.iceberg;
 
 import com.facebook.airlift.log.Logger;
-import com.facebook.presto.hive.HdfsContext;
 import com.facebook.presto.hive.HdfsEnvironment;
 import com.facebook.presto.hive.metastore.ExtendedHiveMetastore;
-import com.facebook.presto.iceberg.util.SinglePathCatalog;
+import com.facebook.presto.iceberg.samples.SampleUtil;
 import com.facebook.presto.spi.ConnectorSession;
 import com.facebook.presto.spi.SchemaTableName;
 import com.facebook.presto.spi.connector.ConnectorMetadata;
@@ -30,7 +29,6 @@ import javax.inject.Inject;
 import javax.inject.Provider;
 
 import java.lang.invoke.MethodHandle;
-import java.util.HashMap;
 
 import static com.facebook.presto.common.block.MethodHandleUtil.methodHandle;
 import static com.facebook.presto.common.type.StandardTypes.VARCHAR;
@@ -106,10 +104,7 @@ public class CreateTableSampleProcedure
         }
         String location = icebergTable.location();
         Path tableLocation = new Path(location);
-        HdfsContext context = new HdfsContext(clientSession, schema, table, location, false);
-        try (SinglePathCatalog c = new SinglePathCatalog(tableLocation, hdfsEnvironment.getConfiguration(context, tableLocation))) {
-            Path samplePath = new Path(tableLocation, SAMPLE_TABLE_ID.name());
-            c.initialize(samplePath.getName(), new HashMap<>());
+        try (SampleUtil.AutoCloseableCatalog c = SampleUtil.getCatalogForSampleTable(icebergTable, schema, hdfsEnvironment, clientSession)) {
             // create the table for samples and load the table back to make sure it's valid
             c.createTable(SAMPLE_TABLE_ID, icebergTable.schema());
         }
