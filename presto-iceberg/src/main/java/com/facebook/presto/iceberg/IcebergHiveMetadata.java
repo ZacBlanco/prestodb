@@ -74,6 +74,7 @@ import static com.facebook.presto.iceberg.PartitionFields.parsePartitionFields;
 import static com.facebook.presto.iceberg.TableType.DATA;
 import static com.facebook.presto.iceberg.TableType.SAMPLES;
 import static com.facebook.presto.iceberg.TypeConverter.toIcebergType;
+import static com.facebook.presto.iceberg.samples.SampleUtil.SAMPLE_TABLE_ID;
 import static com.facebook.presto.spi.StandardErrorCode.INVALID_SCHEMA_PROPERTY;
 import static com.facebook.presto.spi.StandardErrorCode.NOT_SUPPORTED;
 import static com.facebook.presto.spi.StandardErrorCode.SCHEMA_NOT_EMPTY;
@@ -324,6 +325,11 @@ public class IcebergHiveMetadata
         }
         MetastoreContext metastoreContext = new MetastoreContext(session.getIdentity(), session.getQueryId(), session.getClientInfo(), session.getSource(), Optional.empty(), false, HiveColumnConverterProvider.DEFAULT_COLUMN_CONVERTER_PROVIDER);
         metastore.dropTable(metastoreContext, handle.getSchemaName(), handle.getTableName(), true);
+        if (SampleUtil.sampleTableExists(table, handle.getSchemaName(), hdfsEnvironment, session)) {
+            try (SampleUtil.AutoCloseableCatalog c = SampleUtil.getCatalogForSampleTable(table, handle.getSchemaName(), hdfsEnvironment, session)) {
+                c.dropTable(SAMPLE_TABLE_ID, true);
+            }
+        }
     }
 
     @Override
