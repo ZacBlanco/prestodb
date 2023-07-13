@@ -27,9 +27,11 @@ import com.facebook.presto.spi.statistics.Estimate;
 import com.facebook.presto.spi.statistics.TableStatistics;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import org.apache.iceberg.ChangelogScanTask;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.PartitionField;
+import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.io.CloseableIterable;
@@ -37,6 +39,8 @@ import org.apache.iceberg.types.Comparators;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
 import org.apache.iceberg.util.SnapshotUtil;
+
+import javax.validation.constraints.NotNull;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -82,25 +86,163 @@ public class TableStatisticsMaker
         return new TableStatisticsMaker(typeManager, icebergTable, session, hdfsEnvironment).makeTableStatistics(tableHandle, constraint);
     }
 
+    private static class TableDiff
+            implements Comparable<TableDiff>
+    {
+        public long recordsAdded;
+        public long recordsDeleted;
+
+        @Override
+        public int compareTo(@NotNull TableStatisticsMaker.TableDiff o)
+        {
+            // this calculation may eventually be changes to weight added/deleted records unevenly
+            // due to the way the sample is created
+            return Long.compare(this.recordsAdded + this.recordsDeleted, o.recordsAdded + o.recordsDeleted);
+        }
+    }
+
+    private static TableDiff calculateDiff(Table table, long beginSnapshotId, long endSnapshotId)
+    {
+        TableDiff diff = new TableDiff();
+        try (CloseableIterable<ChangelogScanTask> tasks = table.newIncrementalChangelogScan().fromSnapshotExclusive(beginSnapshotId).toSnapshot(endSnapshotId).planFiles()) {
+            for (ChangelogScanTask task : tasks) {
+                switch (task.operation()) {
+                    case DELETE:
+                        diff.recordsDeleted += task.estimatedRowsCount();
+                        break;
+                    case INSERT:
+                        diff.recordsAdded += task.estimatedRowsCount();
+                        break;
+                }
+            }
+            return diff;
+        }
+        catch (IOException | IllegalArgumentException | IllegalStateException e) {
+            LOG.error("failed to calculate diff", e);
+            return diff;
+        }
+    }
+
+    /**
+     * There are two tables: "actual" and "sample" which have snapshots that occur at varying
+     * points. e.g.
+     * <br>
+     * <code>
+     * actual |------s1---------s2---------s3----------s4----s5--s6-s7------->
+     * <br>
+     * sample |---------s1-----------------------s2----------------------s3-->
+     * </code>
+     * <br>
+     * The goal here is to calculate the snapshot s[1-3] which has the smallest delta to the
+     * snapshot currently queried by the actual table.
+     * <br>
+     * For example, if the user queried "actual" at snapshot s5, which sample of the snapshot table
+     * is going to most accurately represent the table @ s5?
+     * If s4 added 10M rows, but s6 and s7 only added 10k rows, Sample s3 is likely going to
+     * be more representative.
+     * <br>
+     * The algorithm is as follows:
+     * <ol>
+     *     <li>Calculate time of the snapshot, defined as S,  being queried, defined as t1</li>
+     *     <li>
+     *         Lookup the snapshots on the timeline of sample table which immediately precede
+     *         and succeed t1 -- if either preceding or succeeding don't exist, return whichever one
+     *         does exist, or none if no snapshot could be found.
+     *         The preceding snapshot of the sample table, S2, occurs at t2.
+     *         The succeeding snapshot of the sample table, S3, occurs at t3.
+     *     </li>
+     *     <li>
+     *         Find the version of the actual table which occurs closest to time t2, Sa1. Calculate
+     *         the changelog diff between Sa1-->S, diff_before
+     *     </li>
+     *     <li>
+     *         4. Find the version of the actual table which occurs closest to time t3, Sa2.
+     *         Calculate the changelog diff between S-->Sa2, diff_after
+     *     </li>
+     *     <li>
+     *         Compare the size of the diff between diff_before and diff_after. If diff_before is
+     *         smaller or equal to diff_after, choose sample @ S2,If diff_after is smaller, choose
+     *         sample @ S3,
+     *     </li>
+     *
+     * </ol>
+     *
+     * @param actualTable reference to the real iceberg table
+     * @param actualTableHandle the presto {@link IcebergTableHandle} reference to the "actual"
+     * iceberg table
+     * @param sampleTable the reference to the Sample {@link Table}.
+     * @return the snapshot id to use for the sample table.
+     */
+    public static Optional<Long> calculateSnapshotToUseFromSample(Table actualTable, IcebergTableHandle actualTableHandle, Table sampleTable)
+    {
+        return actualTableHandle.getSnapshotId().flatMap((ssid) -> {
+            Snapshot actualSnap = actualTable.snapshot(ssid);
+            Snapshot samplePrevSnap;
+            try {
+                samplePrevSnap = sampleTable.snapshot(SnapshotUtil.snapshotIdAsOfTime(sampleTable, actualSnap.timestampMillis()));
+            }
+            catch (IllegalArgumentException | IllegalStateException e) {
+                // no snapshot exists before this time, use the first version of the sample table after the timestamp
+                try {
+                    return Optional.of(SnapshotUtil.oldestAncestorAfter(sampleTable, actualSnap.timestampMillis()).snapshotId());
+                }
+                catch (IllegalArgumentException | IllegalStateException e2) {
+                    LOG.warn("no sample table snapshots found before or after " + actualSnap.timestampMillis() + ". Did you create the samples table?", e);
+                    return Optional.empty();
+                }
+            }
+            Snapshot sampleNextSnap;
+            try {
+                sampleNextSnap = SnapshotUtil.snapshotAfter(sampleTable, samplePrevSnap.snapshotId());
+            }
+            catch (IllegalStateException | IllegalArgumentException | NullPointerException e) {
+                // no sample snapshot which after this.
+                return Optional.of(samplePrevSnap.snapshotId());
+            }
+            Snapshot actualPrevSnap;
+            try {
+                actualPrevSnap = actualTable.snapshot(SnapshotUtil.snapshotIdAsOfTime(actualTable, samplePrevSnap.timestampMillis()));
+            }
+            catch (IllegalArgumentException | IllegalStateException e) {
+                // there's no snapshot that exists which was created before this time. Does the table even exist?
+                // ideally this shouldn't happen, as it means the sample table was created before the actual table
+                // in the case it happens, just return nothing
+                LOG.warn("no actual table snapshots found before " + actualSnap.timestampMillis() + ". How did you get here. Please file a bug report?", e);
+                return Optional.empty();
+            }
+            Snapshot actualNextSnap;
+            try {
+                long actualSnapAsOfSampleSnapTime = SnapshotUtil.snapshotIdAsOfTime(actualTable, sampleNextSnap.timestampMillis());
+                actualNextSnap = SnapshotUtil.snapshotAfter(actualTable, actualSnapAsOfSampleSnapTime);
+            }
+            catch (IllegalArgumentException | IllegalStateException | NullPointerException e) {
+                // there is no snapshot in the actual table which exists after the sample was created.
+                // this could happen in the case where the sample table has been updated, but no new writes
+                // have occurred to the actual table after the time the sample was taken.
+                // in this case, we should just use the most recent actual table snapshot
+                actualNextSnap = actualTable.currentSnapshot();
+            }
+            TableDiff diffPrev = calculateDiff(actualTable, actualPrevSnap.snapshotId(), actualSnap.snapshotId());
+            TableDiff diffNext = calculateDiff(actualTable, actualSnap.snapshotId(), actualNextSnap.snapshotId());
+            if (diffPrev.compareTo(diffNext) <= 0) {
+                return Optional.of(samplePrevSnap.snapshotId());
+            }
+            else {
+                return Optional.of(sampleNextSnap.snapshotId());
+            }
+        });
+    }
+
     private TableStatistics makeTableStatistics(IcebergTableHandle tableHandle, Constraint constraint)
     {
         Table icebergTable = this.icebergTable;
         if (tableHandle.getTableType() != TableType.SAMPLES && useSampleStatistics(session) &&
                 SampleUtil.sampleTableExists(icebergTable, tableHandle.getSchemaName(), hdfsEnvironment, session)) {
             org.apache.iceberg.Table sampleTable = SampleUtil.getSampleTableFromActual(icebergTable, tableHandle.getSchemaName(), hdfsEnvironment, session);
-            final org.apache.iceberg.Table ibt = icebergTable;
-            Optional<Long> tableHandleSnapshotId = tableHandle.getSnapshotId().map((ssid) -> {
-                long time = ibt.snapshot(ssid).timestampMillis();
-                try {
-                    return SnapshotUtil.snapshotIdAsOfTime(sampleTable, time);
-                }
-                catch (IllegalArgumentException e) {
-                    return sampleTable.currentSnapshot().snapshotId();
-                }
-            });
-            LOG.debug("using sample table statistics with snapshotID " + tableHandleSnapshotId);
+            Optional<Long> sampleTableSnapshotId = calculateSnapshotToUseFromSample(icebergTable, tableHandle, sampleTable);
+            LOG.debug("using sample table statistics with snapshotID " + sampleTableSnapshotId);
             icebergTable = sampleTable;
-            tableHandle = new IcebergTableHandle(tableHandle.getSchemaName(), sampleTable.name(), tableHandle.getTableType(), tableHandleSnapshotId, tableHandle.getPredicate());
+            tableHandle = new IcebergTableHandle(tableHandle.getSchemaName(), sampleTable.name(), tableHandle.getTableType(), sampleTableSnapshotId, tableHandle.getPredicate());
         }
         Optional<Long> snapshotId = tableHandle.getSnapshotId();
 

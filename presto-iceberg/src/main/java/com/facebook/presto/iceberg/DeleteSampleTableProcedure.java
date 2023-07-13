@@ -102,7 +102,6 @@ public class DeleteSampleTableProcedure
             icebergTable = getHiveIcebergTable(metastore, hdfsEnvironment, clientSession, schemaTableName);
         }
         try (SampleUtil.AutoCloseableCatalog c = SampleUtil.getCatalogForSampleTable(icebergTable, schema, hdfsEnvironment, clientSession)) {
-            // create the table for samples and load the table back to make sure it's valid
             c.dropTable(SAMPLE_TABLE_ID, true);
         }
     }
