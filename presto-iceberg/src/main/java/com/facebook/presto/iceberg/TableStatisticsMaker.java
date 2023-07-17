@@ -91,13 +91,15 @@ public class TableStatisticsMaker
     {
         public long recordsAdded;
         public long recordsDeleted;
+        public long recordsUpdated;
 
         @Override
         public int compareTo(@NotNull TableStatisticsMaker.TableDiff o)
         {
             // this calculation may eventually be changes to weight added/deleted records unevenly
             // due to the way the sample is created
-            return Long.compare(this.recordsAdded + this.recordsDeleted, o.recordsAdded + o.recordsDeleted);
+            return Long.compare(this.recordsAdded + this.recordsDeleted + this.recordsUpdated,
+                    o.recordsAdded + o.recordsDeleted + o.recordsUpdated);
         }
     }
 
@@ -113,6 +115,9 @@ public class TableStatisticsMaker
                     case INSERT:
                         diff.recordsAdded += task.estimatedRowsCount();
                         break;
+                    case UPDATE_BEFORE:
+                    case UPDATE_AFTER:
+                        diff.recordsUpdated += task.estimatedRowsCount();
                 }
             }
             return diff;
