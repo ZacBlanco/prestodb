@@ -33,21 +33,19 @@ import static com.facebook.presto.common.block.MethodHandleUtil.methodHandle;
 import static com.facebook.presto.common.type.StandardTypes.VARCHAR;
 import static com.facebook.presto.iceberg.CatalogType.HADOOP;
 import static com.facebook.presto.iceberg.CatalogType.NESSIE;
-import static com.facebook.presto.iceberg.IcebergTableProperties.SAMPLE_TABLE_LAST_SNAPSHOT;
-import static com.facebook.presto.iceberg.IcebergTableProperties.SAMPLE_TABLE_PRIMARY_KEY;
 import static com.facebook.presto.iceberg.IcebergUtil.getHiveIcebergTable;
-import static com.facebook.presto.iceberg.samples.SampleUtil.SAMPLE_TABLE_ID;
 import static com.facebook.presto.iceberg.util.IcebergPrestoModelConverters.toIcebergTableIdentifier;
 import static java.util.Objects.requireNonNull;
 
-public class CreateSampleTableProcedure
+public class SetTablePropertyProcedure
         implements Provider<Procedure>
 {
-    private static final Logger LOG = Logger.get(CreateSampleTableProcedure.class);
-    private static final MethodHandle CREATE_SAMPLE_TABLE = methodHandle(
-            CreateSampleTableProcedure.class,
-            "createSampleTable",
+    private static final Logger LOG = Logger.get(SetTablePropertyProcedure.class);
+    private static final MethodHandle SET_TABLE_PROPERTY = methodHandle(
+            SetTablePropertyProcedure.class,
+            "setTableProperty",
             ConnectorSession.class,
+            String.class,
             String.class,
             String.class,
             String.class);
@@ -58,7 +56,7 @@ public class CreateSampleTableProcedure
     private final IcebergResourceFactory resourceFactory;
 
     @Inject
-    public CreateSampleTableProcedure(
+    public SetTablePropertyProcedure(
             IcebergConfig config,
             IcebergMetadataFactory metadataFactory,
             HdfsEnvironment hdfsEnvironment,
@@ -75,12 +73,13 @@ public class CreateSampleTableProcedure
     {
         return new Procedure(
                 "system",
-                "create_sample_table",
+                "set_table_property",
                 ImmutableList.of(
                         new Procedure.Argument("schema", VARCHAR),
                         new Procedure.Argument("table", VARCHAR),
-                        new Procedure.Argument("primary_key", VARCHAR)),
-                CREATE_SAMPLE_TABLE.bindTo(this));
+                        new Procedure.Argument("key", VARCHAR),
+                        new Procedure.Argument("value", VARCHAR)),
+                SET_TABLE_PROPERTY.bindTo(this));
     }
 
     /**
@@ -91,27 +90,25 @@ public class CreateSampleTableProcedure
      * @param schema the schema where the table exists
      * @param table the name of the table to sample from
      */
-    public void createSampleTable(ConnectorSession clientSession, String schema, String table, String primaryKey)
+    public void setTableProperty(ConnectorSession clientSession, String schema, String table, String key, String value)
     {
-        SchemaTableName schemaTableName = new SchemaTableName(schema, table);
         ConnectorMetadata metadata = metadataFactory.create();
+        IcebergTableName tableName = IcebergTableName.from(table);
+        SchemaTableName schemaTableName = new SchemaTableName(schema, tableName.getTableName());
         Table icebergTable;
         CatalogType catalogType = config.getCatalogType();
-
         if (catalogType == HADOOP || catalogType == NESSIE) {
-            icebergTable = resourceFactory.getCatalog(clientSession).loadTable(toIcebergTableIdentifier(schema, table));
+            icebergTable = resourceFactory.getCatalog(clientSession).loadTable(toIcebergTableIdentifier(schema, tableName.getTableName()));
         }
         else {
             ExtendedHiveMetastore metastore = ((IcebergHiveMetadata) metadata).getMetastore();
             icebergTable = getHiveIcebergTable(metastore, hdfsEnvironment, clientSession, schemaTableName);
         }
-        try (SampleUtil.AutoCloseableCatalog c = SampleUtil.getCatalogForSampleTable(icebergTable, schema, hdfsEnvironment, clientSession)) {
-            // create the table for samples and load the table back to make sure it's valid
-            c.createTable(SAMPLE_TABLE_ID, icebergTable.schema());
+        if (tableName.getTableType() == TableType.SAMPLES) {
+            icebergTable = SampleUtil.getSampleTableFromActual(icebergTable, schema, hdfsEnvironment, clientSession);
         }
         icebergTable.updateProperties()
-                .set(SAMPLE_TABLE_PRIMARY_KEY, primaryKey)
-                .set(SAMPLE_TABLE_LAST_SNAPSHOT, Long.toString(icebergTable.currentSnapshot().snapshotId()))
+                .set(key, value)
                 .commit();
     }
 }

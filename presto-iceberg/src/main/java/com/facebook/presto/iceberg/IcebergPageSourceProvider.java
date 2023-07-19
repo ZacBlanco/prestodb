@@ -34,6 +34,7 @@ import com.facebook.presto.hive.orc.HdfsOrcDataSource;
 import com.facebook.presto.hive.orc.OrcBatchPageSource;
 import com.facebook.presto.hive.orc.ProjectionBasedDwrfKeyProvider;
 import com.facebook.presto.hive.parquet.ParquetPageSource;
+import com.facebook.presto.iceberg.changelog.ChangelogPageSource;
 import com.facebook.presto.memory.context.AggregatedMemoryContext;
 import com.facebook.presto.orc.DwrfEncryptionProvider;
 import com.facebook.presto.orc.DwrfKeyProvider;
@@ -94,6 +95,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static com.facebook.presto.hive.CacheQuota.NO_CACHE_CONSTRAINTS;
@@ -652,6 +654,11 @@ public class IcebergPageSourceProvider
     {
         IcebergSplit split = (IcebergSplit) connectorSplit;
         IcebergTableLayoutHandle icebergLayout = (IcebergTableLayoutHandle) layout;
+
+        if (split.getChangelogSplitInfo().isPresent()) {
+            columns = split.getChangelogSplitInfo().get().getIcebergColumns().stream().map(ColumnHandle.class::cast).collect(Collectors.toList());
+        }
+
         IcebergTableHandle table = icebergLayout.getTable();
 
         List<IcebergColumnHandle> icebergColumns = columns.stream()
@@ -679,7 +686,11 @@ public class IcebergPageSourceProvider
                 table.getPredicate(),
                 splitContext.isCacheable());
 
-        return new IcebergPageSource(icebergColumns, partitionKeys, dataPageSource, session.getSqlFunctionProperties().getTimeZoneKey());
+        ConnectorPageSource dataSource = new IcebergPageSource(icebergColumns, partitionKeys, dataPageSource, session.getSqlFunctionProperties().getTimeZoneKey());
+        if (split.getChangelogSplitInfo().isPresent()) {
+            dataSource = new ChangelogPageSource(dataSource, split.getChangelogSplitInfo().get(), split, icebergColumns);
+        }
+        return dataSource;
     }
 
     private ConnectorPageSource createDataPageSource(
