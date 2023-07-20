@@ -95,7 +95,9 @@ public class IcebergSplitManager
         if (table.getTableType() == CHANGELOG) {
             // TODO change this to calculate the correct id to scan from.
             // this change only reads the diff between the current and immediate parent snapshot.
-            IncrementalChangelogScan scan = icebergTable.newIncrementalChangelogScan().fromSnapshotExclusive(icebergTable.currentSnapshot().parentId());
+            long fromSnap = Long.parseLong(icebergTable.properties().get(IcebergTableProperties.SAMPLE_TABLE_LAST_SNAPSHOT));
+            IncrementalChangelogScan scan = icebergTable.newIncrementalChangelogScan()
+                    .fromSnapshotExclusive(fromSnap);
             return new ChangelogSplitSource(session, typeManager, icebergTable, scan, scan.targetSplitSize());
         }
         else {

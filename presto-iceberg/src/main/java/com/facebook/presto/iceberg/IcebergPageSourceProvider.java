@@ -95,7 +95,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.function.Function;
-import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static com.facebook.presto.hive.CacheQuota.NO_CACHE_CONSTRAINTS;
@@ -649,17 +648,20 @@ public class IcebergPageSourceProvider
             ConnectorSession session,
             ConnectorSplit connectorSplit,
             ConnectorTableLayoutHandle layout,
-            List<ColumnHandle> columns,
+            List<ColumnHandle> desiredColumns,
             SplitContext splitContext)
     {
         IcebergSplit split = (IcebergSplit) connectorSplit;
         IcebergTableLayoutHandle icebergLayout = (IcebergTableLayoutHandle) layout;
-
-        if (split.getChangelogSplitInfo().isPresent()) {
-            columns = split.getChangelogSplitInfo().get().getIcebergColumns().stream().map(ColumnHandle.class::cast).collect(Collectors.toList());
-        }
-
         IcebergTableHandle table = icebergLayout.getTable();
+
+        List<ColumnHandle> columns = desiredColumns;
+        if (split.getChangelogSplitInfo().isPresent()) {
+            // just ask for the entire set of columns from the original table
+            // TODO - only put the PK if it's in the desired columns list, otherwise this should
+            // be empty. This prevents additional data scanning
+            columns = (List<ColumnHandle>) (List<?>) split.getChangelogSplitInfo().get().getIcebergColumns();
+        }
 
         List<IcebergColumnHandle> icebergColumns = columns.stream()
                 .map(IcebergColumnHandle.class::cast)
@@ -688,7 +690,7 @@ public class IcebergPageSourceProvider
 
         ConnectorPageSource dataSource = new IcebergPageSource(icebergColumns, partitionKeys, dataPageSource, session.getSqlFunctionProperties().getTimeZoneKey());
         if (split.getChangelogSplitInfo().isPresent()) {
-            dataSource = new ChangelogPageSource(dataSource, split.getChangelogSplitInfo().get(), split, icebergColumns);
+            dataSource = new ChangelogPageSource(dataSource, split.getChangelogSplitInfo().get(), split, (List<IcebergColumnHandle>) (List<?>) desiredColumns, icebergColumns);
         }
         return dataSource;
     }

@@ -49,17 +49,17 @@ public class ChangelogPageSource
     private final ConnectorPageSource delegate;
     private final ConnectorSplit split;
     private final ChangelogSplitInfo changelogSplitInfo;
-    private final List<IcebergColumnHandle> columns;
+    private final List<IcebergColumnHandle> desiredColumns;
     private final int primaryKeyIndex;
 
-    public ChangelogPageSource(ConnectorPageSource delegate, ChangelogSplitInfo changelogSplitInfo, ConnectorSplit split, List<IcebergColumnHandle> columns)
+    public ChangelogPageSource(ConnectorPageSource delegate, ChangelogSplitInfo changelogSplitInfo, ConnectorSplit split, List<IcebergColumnHandle> desiredColumns, List<IcebergColumnHandle> delegateColumns)
     {
         this.delegate = requireNonNull(delegate, "delegate is null");
         this.split = requireNonNull(split, "split is null");
         this.changelogSplitInfo = requireNonNull(changelogSplitInfo, "changelogSplitInfo is null");
-        this.columns = requireNonNull(columns, "columns is null");
-        this.primaryKeyIndex = IntStream.range(0, columns.size())
-                .filter(i -> columns.get(i).getName().equals(changelogSplitInfo.getPrimaryKeyColumnName())).findFirst().getAsInt();
+        this.desiredColumns = requireNonNull(desiredColumns, "columns is null");
+        this.primaryKeyIndex = IntStream.range(0, delegateColumns.size())
+                .filter(i -> delegateColumns.get(i).getName().equals(changelogSplitInfo.getPrimaryKeyColumnName())).findFirst().getAsInt();
     }
 
     @Override
@@ -91,20 +91,18 @@ public class ChangelogPageSource
     {
         // In order to produce the correct page, we have to build the blocks that
         // make up the schema of the changelog table.
-        // First, create blocks matching the number of rows in the page
-        // then, extract the block pertaining to the primary key of the table
-        // then, combine all blocks into a single page.
+        // First, create blocks matching the selected columns in the page
+        // if required, extract the block pertaining to the primary key of the
+        // table then, combine all blocks into a single page.
         Page delegatePage = delegate.getNextPage();
         if (delegatePage == null) {
             return null;
         }
-        int columnCount = 4;
-        int rows = delegatePage.getPositionCount();
-        Block[] columns = new Block[columnCount];
-        columns[0] = RunLengthEncodedBlock.create(VARCHAR, Slices.utf8Slice(changelogSplitInfo.getOperation().toString()), rows);
-        columns[1] = RunLengthEncodedBlock.create(BIGINT, changelogSplitInfo.getChangeOrdinal(), rows);
-        columns[2] = RunLengthEncodedBlock.create(BIGINT, changelogSplitInfo.getSnapshotId(), rows);
-        columns[3] = delegatePage.getBlock(primaryKeyIndex);
+        Block[] columns = new Block[desiredColumns.size()];
+        for (int i = 0; i < columns.length; i++) {
+            columns[i] = ChangelogSchemaColumns.valueOf(desiredColumns.get(i).getName().toUpperCase()).getBlock(this, delegatePage);
+        }
+
         return new Page(columns);
     }
 
@@ -119,5 +117,25 @@ public class ChangelogPageSource
             throws IOException
     {
         delegate.close();
+    }
+
+    public enum ChangelogSchemaColumns
+    {
+        OPERATION((source, page) -> RunLengthEncodedBlock.create(VARCHAR, Slices.utf8Slice(source.changelogSplitInfo.getOperation().toString()), page.getPositionCount())),
+        ORDINAL((source, page) -> RunLengthEncodedBlock.create(BIGINT, source.changelogSplitInfo.getChangeOrdinal(), page.getPositionCount())),
+        SNAPSHOT_ID((source, page) -> RunLengthEncodedBlock.create(BIGINT, source.changelogSplitInfo.getSnapshotId(), page.getPositionCount())),
+        PRIMARY_KEY((source, page) -> page.getBlock(source.primaryKeyIndex));
+
+        private final ChangelogUtil.Function2<ChangelogPageSource, Page, Block> blockSupplier;
+
+        ChangelogSchemaColumns(ChangelogUtil.Function2<ChangelogPageSource, Page, Block> blockSupplier)
+        {
+            this.blockSupplier = blockSupplier;
+        }
+
+        public Block getBlock(ChangelogPageSource pageSource, Page page)
+        {
+            return blockSupplier.apply(pageSource, page);
+        }
     }
 }

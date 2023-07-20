@@ -15,11 +15,7 @@ package com.facebook.presto.iceberg;
 
 import com.facebook.airlift.json.JsonCodec;
 import com.facebook.airlift.log.Logger;
-import com.facebook.presto.common.type.NamedTypeSignature;
-import com.facebook.presto.common.type.RowFieldName;
-import com.facebook.presto.common.type.StandardTypes;
 import com.facebook.presto.common.type.TypeManager;
-import com.facebook.presto.common.type.TypeSignatureParameter;
 import com.facebook.presto.hive.HdfsEnvironment;
 import com.facebook.presto.hive.HiveWrittenPartitions;
 import com.facebook.presto.iceberg.changelog.ChangelogUtil;
@@ -67,7 +63,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
 
 import static com.facebook.presto.common.type.BigintType.BIGINT;
 import static com.facebook.presto.iceberg.IcebergColumnHandle.primitiveIcebergColumnHandle;
@@ -162,14 +157,12 @@ public abstract class IcebergAbstractMetadata
     public ConnectorTableMetadata getTableMetadata(ConnectorSession session, ConnectorTableHandle table)
     {
         IcebergTableHandle ith = (IcebergTableHandle) table;
-        return getChangelogTableMeta(session, ith.getSchemaTableNameWithType());
+        return getTableMetaWithType(session, ith.getSchemaTableNameWithType());
     }
 
     protected abstract Table getIcebergTable(ConnectorSession session, SchemaTableName table);
 
-
-
-    private ConnectorTableMetadata getChangelogTableMeta(ConnectorSession session, SchemaTableName table)
+    private ConnectorTableMetadata getTableMetaWithType(ConnectorSession session, SchemaTableName table)
     {
         IcebergTableName itn = IcebergTableName.from(table.getTableName());
         ConnectorTableMetadata tableMeta = getTableMetadata(session, table);
@@ -196,8 +189,7 @@ public abstract class IcebergAbstractMetadata
         ImmutableMap.Builder<SchemaTableName, List<ColumnMetadata>> columns = ImmutableMap.builder();
         for (SchemaTableName table : tables) {
             try {
-                ConnectorTableMetadata tableMeta = getChangelogTableMeta(session, table);
-                columns.put(table, tableMeta.getColumns());
+                columns.put(table, getTableMetaWithType(session, table).getColumns());
             }
             catch (TableNotFoundException e) {
                 log.warn(String.format("table disappeared during listing operation: %s", e.getMessage()));
@@ -225,9 +217,7 @@ public abstract class IcebergAbstractMetadata
     public Map<String, ColumnHandle> getColumnHandles(ConnectorSession session, ConnectorTableHandle tableHandle)
     {
         IcebergTableHandle icebergHandle = (IcebergTableHandle) tableHandle;
-
         Schema schema;
-
         Table icebergTable = getIcebergTable(session, icebergHandle.getSchemaTableName());
         if (icebergHandle.getTableType() == CHANGELOG) {
             String primaryKeyColumn = IcebergTableProperties.getSampleTablePrimaryKey((Map) icebergTable.properties());

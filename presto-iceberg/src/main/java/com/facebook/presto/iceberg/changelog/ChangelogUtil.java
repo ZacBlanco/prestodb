@@ -32,13 +32,19 @@ public class ChangelogUtil
 {
     private ChangelogUtil() {}
 
+    @FunctionalInterface
+    protected interface Function2<T1, T2, R>
+    {
+        R apply(T1 arg1, T2 arg2);
+    }
+
     public static Schema changelogTableSchema(Type primaryKeyType)
     {
         return new Schema(
-                Types.NestedField.required(0, "operation", Types.StringType.get()),
-                Types.NestedField.required(1, "ordinal", Types.LongType.get()),
-                Types.NestedField.required(2, "snapshotId", Types.LongType.get()),
-                Types.NestedField.required(3, "primary_key", primaryKeyType));
+                Types.NestedField.required(1, "operation", Types.StringType.get()),
+                Types.NestedField.required(2, "ordinal", Types.LongType.get()),
+                Types.NestedField.required(3, "snapshot_id", Types.LongType.get()),
+                Types.NestedField.required(4, "primary_key", primaryKeyType));
     }
 
     public static ConnectorTableMetadata getChangelogTableMeta(SchemaTableName tableName, Type primaryKeyType, TypeManager typeManager)
