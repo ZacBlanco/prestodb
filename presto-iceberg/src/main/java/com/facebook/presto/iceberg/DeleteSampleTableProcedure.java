@@ -104,5 +104,9 @@ public class DeleteSampleTableProcedure
         try (SampleUtil.AutoCloseableCatalog c = SampleUtil.getCatalogForSampleTable(icebergTable, schema, hdfsEnvironment, clientSession)) {
             c.dropTable(SAMPLE_TABLE_ID, true);
         }
+        icebergTable.updateProperties()
+                .remove(IcebergTableProperties.SAMPLE_TABLE_PRIMARY_KEY)
+                .remove(IcebergTableProperties.SAMPLE_TABLE_LAST_SNAPSHOT)
+                .commit();
     }
 }
