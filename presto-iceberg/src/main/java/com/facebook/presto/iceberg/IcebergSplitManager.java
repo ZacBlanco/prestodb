@@ -17,6 +17,7 @@ import com.facebook.presto.common.type.TypeManager;
 import com.facebook.presto.hive.HdfsEnvironment;
 import com.facebook.presto.hive.metastore.ExtendedHiveMetastore;
 import com.facebook.presto.iceberg.changelog.ChangelogSplitSource;
+import com.facebook.presto.iceberg.changelog.ChangelogUtil;
 import com.facebook.presto.iceberg.samples.SampleUtil;
 import com.facebook.presto.spi.ConnectorSession;
 import com.facebook.presto.spi.ConnectorSplitSource;
@@ -96,7 +97,11 @@ public class IcebergSplitManager
             // TODO change this to calculate the correct id to scan from.
             // this change only reads the diff between the current and immediate parent snapshot.
             long fromSnap = Long.parseLong(icebergTable.properties().get(IcebergTableProperties.SAMPLE_TABLE_LAST_SNAPSHOT));
+            String primaryKeyColumnName = icebergTable.properties().get(IcebergTableProperties.SAMPLE_TABLE_PRIMARY_KEY);
+            // if the predicate is on the "primary_key" column, then we can add a predicate to the table
+            // scan. We need to convert the predicate to filter on the correct column name though.
             IncrementalChangelogScan scan = icebergTable.newIncrementalChangelogScan()
+                    .filter(toIcebergExpression(ChangelogUtil.convertTupleDomain(table.getPredicate(), primaryKeyColumnName, icebergTable, typeManager)))
                     .fromSnapshotExclusive(fromSnap);
             return new ChangelogSplitSource(session, typeManager, icebergTable, scan, scan.targetSplitSize());
         }
