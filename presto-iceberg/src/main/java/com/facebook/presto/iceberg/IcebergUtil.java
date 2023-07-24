@@ -18,6 +18,7 @@ import com.facebook.presto.common.type.TypeManager;
 import com.facebook.presto.hive.HdfsContext;
 import com.facebook.presto.hive.HdfsEnvironment;
 import com.facebook.presto.hive.HiveColumnConverterProvider;
+import com.facebook.presto.hive.HivePartitionKey;
 import com.facebook.presto.hive.metastore.ExtendedHiveMetastore;
 import com.facebook.presto.hive.metastore.MetastoreContext;
 import com.facebook.presto.spi.ColumnMetadata;
@@ -27,6 +28,8 @@ import com.facebook.presto.spi.PrestoException;
 import com.facebook.presto.spi.SchemaTableName;
 import com.google.common.collect.ImmutableMap;
 import org.apache.iceberg.BaseTable;
+import org.apache.iceberg.ContentScanTask;
+import org.apache.iceberg.DataFile;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.HistoryEntry;
 import org.apache.iceberg.MetadataTableType;
@@ -34,12 +37,17 @@ import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.Snapshot;
+import org.apache.iceberg.StructLike;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableOperations;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.io.LocationProvider;
+import org.apache.iceberg.types.Type;
 
+import java.nio.ByteBuffer;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -52,6 +60,8 @@ import static com.facebook.presto.iceberg.IcebergErrorCode.ICEBERG_INVALID_SNAPS
 import static com.facebook.presto.iceberg.IcebergTableProperties.FILE_FORMAT_PROPERTY;
 import static com.facebook.presto.iceberg.IcebergTableProperties.FORMAT_VERSION;
 import static com.facebook.presto.iceberg.IcebergTableProperties.PARTITIONING_PROPERTY;
+import static com.facebook.presto.iceberg.IcebergTableProperties.SAMPLE_TABLE_LAST_SNAPSHOT;
+import static com.facebook.presto.iceberg.IcebergTableProperties.SAMPLE_TABLE_PRIMARY_KEY;
 import static com.facebook.presto.iceberg.PartitionFields.toPartitionFields;
 import static com.facebook.presto.iceberg.TypeConverter.toPrestoType;
 import static com.facebook.presto.iceberg.util.IcebergPrestoModelConverters.toIcebergTableIdentifier;
@@ -64,6 +74,7 @@ import static com.google.common.collect.Streams.mapWithIndex;
 import static com.google.common.collect.Streams.stream;
 import static java.lang.Math.toIntExact;
 import static java.lang.String.format;
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.apache.iceberg.BaseMetastoreTableOperations.ICEBERG_TABLE_TYPE_VALUE;
 import static org.apache.iceberg.BaseMetastoreTableOperations.TABLE_TYPE_PROP;
 import static org.apache.iceberg.LocationProviders.locationsFor;
@@ -71,6 +82,8 @@ import static org.apache.iceberg.MetadataTableUtils.createMetadataTableInstance;
 import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT;
 import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT_DEFAULT;
 import static org.apache.iceberg.TableProperties.WRITE_LOCATION_PROVIDER_IMPL;
+import static org.apache.iceberg.types.Type.TypeID.BINARY;
+import static org.apache.iceberg.types.Type.TypeID.FIXED;
 
 public final class IcebergUtil
 {
@@ -182,6 +195,12 @@ public final class IcebergUtil
         if (!icebergTable.spec().fields().isEmpty()) {
             properties.put(PARTITIONING_PROPERTY, toPartitionFields(icebergTable.spec()));
         }
+        if (icebergTable.properties().get(SAMPLE_TABLE_LAST_SNAPSHOT) != null) {
+            properties.put(SAMPLE_TABLE_LAST_SNAPSHOT, Long.parseLong(icebergTable.properties().get(SAMPLE_TABLE_LAST_SNAPSHOT)));
+        }
+        if (icebergTable.properties().get(SAMPLE_TABLE_PRIMARY_KEY) != null) {
+            properties.put(SAMPLE_TABLE_PRIMARY_KEY, icebergTable.properties().get(SAMPLE_TABLE_PRIMARY_KEY));
+        }
 
         return properties.build();
     }
@@ -238,5 +257,38 @@ public final class IcebergUtil
         return mapWithIndex(schema.columns().stream(),
                 (column, position) -> immutableEntry(column.name(), toIntExact(position)))
                 .collect(toImmutableMap(Entry::getKey, Entry::getValue));
+    }
+
+    public static Map<Integer, HivePartitionKey> getPartitionKeys(ContentScanTask<DataFile> scanTask)
+    {
+        StructLike partition = scanTask.file().partition();
+        PartitionSpec spec = scanTask.spec();
+        Map<PartitionField, Integer> fieldToIndex = getIdentityPartitions(spec);
+        Map<Integer, HivePartitionKey> partitionKeys = new HashMap<>();
+
+        fieldToIndex.forEach((field, index) -> {
+            int id = field.sourceId();
+            String colName = field.name();
+            Type type = spec.schema().findType(id);
+            Class<?> javaClass = type.typeId().javaClass();
+            Object value = partition.get(index, javaClass);
+
+            if (value == null) {
+                partitionKeys.put(id, new HivePartitionKey(colName, Optional.empty()));
+            }
+            else {
+                HivePartitionKey partitionValue;
+                if (type.typeId() == FIXED || type.typeId() == BINARY) {
+                    // this is safe because Iceberg PartitionData directly wraps the byte array
+                    partitionValue = new HivePartitionKey(colName, Optional.of(new String(((ByteBuffer) value).array(), UTF_8)));
+                }
+                else {
+                    partitionValue = new HivePartitionKey(colName, Optional.of(value.toString()));
+                }
+                partitionKeys.put(id, partitionValue);
+            }
+        });
+
+        return Collections.unmodifiableMap(partitionKeys);
     }
 }
