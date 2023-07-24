@@ -23,6 +23,7 @@ import com.facebook.presto.spi.connector.ConnectorMetadata;
 import com.facebook.presto.spi.procedure.Procedure;
 import com.google.common.collect.ImmutableList;
 import org.apache.iceberg.Table;
+import org.apache.iceberg.UpdateProperties;
 
 import javax.inject.Inject;
 import javax.inject.Provider;
@@ -109,9 +110,11 @@ public class CreateSampleTableProcedure
             // create the table for samples and load the table back to make sure it's valid
             c.createTable(SAMPLE_TABLE_ID, icebergTable.schema());
         }
-        icebergTable.updateProperties()
-                .set(SAMPLE_TABLE_PRIMARY_KEY, primaryKey)
-                .set(SAMPLE_TABLE_LAST_SNAPSHOT, Long.toString(icebergTable.currentSnapshot().snapshotId()))
-                .commit();
+        UpdateProperties properties = icebergTable.updateProperties()
+                .set(SAMPLE_TABLE_PRIMARY_KEY, primaryKey);
+        if (icebergTable.currentSnapshot() != null) {
+            properties.set(SAMPLE_TABLE_LAST_SNAPSHOT, Long.toString(icebergTable.currentSnapshot().snapshotId()));
+        }
+        properties.commit();
     }
 }
