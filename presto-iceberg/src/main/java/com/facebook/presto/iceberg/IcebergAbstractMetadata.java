@@ -165,6 +165,9 @@ public abstract class IcebergAbstractMetadata
     private ConnectorTableMetadata getTableMetaWithType(ConnectorSession session, SchemaTableName table)
     {
         IcebergTableName itn = IcebergTableName.from(table.getTableName());
+        if (itn.isSystemTable()) {
+            throw new TableNotFoundException(table);
+        }
         ConnectorTableMetadata tableMeta = getTableMetadata(session, table);
         if (itn.getTableType() == CHANGELOG) {
             String primaryKeyColumn = IcebergTableProperties.getSampleTablePrimaryKey(tableMeta.getProperties());
