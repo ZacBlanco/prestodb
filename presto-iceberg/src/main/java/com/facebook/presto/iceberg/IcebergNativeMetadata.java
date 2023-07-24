@@ -140,7 +140,7 @@ public class IcebergNativeMetadata
     public Optional<SystemTable> getSystemTable(ConnectorSession session, SchemaTableName tableName)
     {
         IcebergTableName name = IcebergTableName.from(tableName.getTableName());
-        if (name.getTableType() == DATA) {
+        if (name.getTableType() == DATA || name.getTableType() == SAMPLES || name.getTableType() == CHANGELOG) {
             return Optional.empty();
         }
 

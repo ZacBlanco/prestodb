@@ -149,7 +149,7 @@ public class IcebergHiveMetadata
     private Optional<SystemTable> getRawSystemTable(ConnectorSession session, SchemaTableName tableName)
     {
         IcebergTableName name = IcebergTableName.from(tableName.getTableName());
-        if (name.getTableType() == DATA) {
+        if (name.getTableType() == DATA || name.getTableType() == SAMPLES || name.getTableType() == CHANGELOG) {
             return Optional.empty();
         }
 
