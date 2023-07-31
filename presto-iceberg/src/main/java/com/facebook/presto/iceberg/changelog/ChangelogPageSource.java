@@ -103,7 +103,7 @@ public class ChangelogPageSource
             columns[i] = ChangelogSchemaColumns.valueOf(desiredColumns.get(i).getName().toUpperCase()).getBlock(this, delegatePage);
         }
 
-        return new Page(columns);
+        return new Page(delegatePage.getPositionCount(), columns);
     }
 
     @Override

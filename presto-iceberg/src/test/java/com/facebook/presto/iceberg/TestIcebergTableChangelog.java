@@ -79,6 +79,18 @@ public class TestIcebergTableChangelog
     }
 
     @Test
+    public void testSelectCount()
+    {
+        assertQuerySucceeds("SELECT count(*) FROM \"orders$changelog\"");
+    }
+
+    @Test
+    public void testCountGroupByAggregation()
+    {
+        assertQuerySucceeds("SELECT count(*) FROM \"orders$changelog\" GROUP BY ordinal");
+    }
+
+    @Test
     public void testPrimaryKeyProjection()
     {
         assertQuerySucceeds("SELECT primary_key FROM \"orders$changelog\"");
