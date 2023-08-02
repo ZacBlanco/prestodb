@@ -36,7 +36,8 @@ public class TestIcebergTableChangelog
 
     @Override
     @BeforeClass
-    public void init() throws Exception
+    public void init()
+            throws Exception
     {
         super.init();
         assertQuerySucceeds("CALL iceberg.system.create_sample_table('tpch', 'orders', 'orderkey')");
@@ -53,8 +54,7 @@ public class TestIcebergTableChangelog
                         "('ordinal', 'bigint', '', '')," +
                         "('snapshotid', 'bigint', '', '')," +
                         "('primarykey', 'bigint', '', '')," +
-                        "('rowdata', 'row(\"orderkey\" bigint, \"custkey\" bigint, \"orderstatus\" varchar, \"totalprice\" double, \"orderdate\" date, \"orderpriority\" varchar, \"clerk\" varchar, \"shippriority\" integer, \"comment\" varchar)', '', '')"
-        );
+                        "('rowdata', 'row(\"orderkey\" bigint, \"custkey\" bigint, \"orderstatus\" varchar, \"totalprice\" double, \"orderdate\" date, \"orderpriority\" varchar, \"clerk\" varchar, \"shippriority\" integer, \"comment\" varchar)', '', '')");
     }
 
     @Test

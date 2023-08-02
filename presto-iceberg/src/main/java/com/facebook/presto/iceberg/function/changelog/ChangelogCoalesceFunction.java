@@ -11,7 +11,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.facebook.presto.operator.aggregation.changelog;
+package com.facebook.presto.iceberg.function.changelog;
 
 import com.facebook.presto.bytecode.DynamicClassLoader;
 import com.facebook.presto.common.block.Block;
@@ -27,6 +27,7 @@ import com.facebook.presto.operator.aggregation.BuiltInAggregationFunctionImplem
 import com.facebook.presto.spi.function.AccumulatorState;
 import com.facebook.presto.spi.function.AccumulatorStateFactory;
 import com.facebook.presto.spi.function.AccumulatorStateSerializer;
+import com.facebook.presto.spi.function.FunctionInstance;
 import com.facebook.presto.spi.function.aggregation.Accumulator;
 import com.facebook.presto.spi.function.aggregation.AggregationMetadata;
 import com.facebook.presto.spi.function.aggregation.GroupedAccumulator;
@@ -52,6 +53,7 @@ import static com.google.common.collect.ImmutableList.toImmutableList;
 public class ChangelogCoalesceFunction
         extends SqlAggregationFunction
 {
+    @FunctionInstance
     public static final ChangelogCoalesceFunction CHANGELOG_COALESCE_FUNCTION = new ChangelogCoalesceFunction();
     private static final String NAME = "coalesce_changelog";
 

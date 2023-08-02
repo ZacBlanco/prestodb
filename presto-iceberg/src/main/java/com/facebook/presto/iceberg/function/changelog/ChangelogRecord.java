@@ -12,7 +12,7 @@
  * limitations under the License.
  */
 
-package com.facebook.presto.operator.aggregation.changelog;
+package com.facebook.presto.iceberg.function.changelog;
 
 import com.facebook.presto.common.block.Block;
 import com.facebook.presto.common.block.BlockBuilder;

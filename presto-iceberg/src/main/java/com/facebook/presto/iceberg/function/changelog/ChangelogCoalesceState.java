@@ -11,7 +11,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.facebook.presto.operator.aggregation.changelog;
+package com.facebook.presto.iceberg.function.changelog;
 
 import com.facebook.presto.common.array.ObjectBigArray;
 import com.facebook.presto.common.type.Type;

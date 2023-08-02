@@ -336,7 +336,6 @@ import static com.facebook.presto.operator.aggregation.TDigestAggregationFunctio
 import static com.facebook.presto.operator.aggregation.approxmostfrequent.ApproximateMostFrequent.APPROXIMATE_MOST_FREQUENT;
 import static com.facebook.presto.operator.aggregation.arrayagg.SetAggregationFunction.SET_AGG;
 import static com.facebook.presto.operator.aggregation.arrayagg.SetUnionFunction.SET_UNION;
-import static com.facebook.presto.operator.aggregation.changelog.ChangelogCoalesceFunction.CHANGELOG_COALESCE_FUNCTION;
 import static com.facebook.presto.operator.aggregation.minmaxby.AlternativeMaxByAggregationFunction.ALTERNATIVE_MAX_BY;
 import static com.facebook.presto.operator.aggregation.minmaxby.AlternativeMinByAggregationFunction.ALTERNATIVE_MIN_BY;
 import static com.facebook.presto.operator.aggregation.minmaxby.MaxByAggregationFunction.MAX_BY;
@@ -848,7 +847,6 @@ public class BuiltInTypeAndFunctionNamespaceManager
                 .function(SET_AGG)
                 .function(SET_UNION)
                 .function(RESERVOIR_SAMPLE)
-                .function(CHANGELOG_COALESCE_FUNCTION)
                 .function(new ArrayAggregationFunction(featuresConfig.isLegacyArrayAgg(), featuresConfig.getArrayAggGroupImplementation()))
                 .functions(new MapSubscriptOperator(featuresConfig.isLegacyMapSubscript()))
                 .functions(MAP_CONSTRUCTOR, MAP_TO_JSON, JSON_TO_MAP, JSON_STRING_TO_MAP)
