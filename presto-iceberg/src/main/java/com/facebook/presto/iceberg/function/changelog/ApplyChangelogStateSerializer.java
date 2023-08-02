@@ -22,18 +22,13 @@ import com.facebook.presto.common.type.VarcharType;
 import com.facebook.presto.spi.function.AccumulatorStateSerializer;
 import com.google.common.collect.ImmutableList;
 
-import static java.util.Objects.requireNonNull;
-
-final class ChangelogCoalesceStateSerializer
-        implements AccumulatorStateSerializer<ChangelogCoalesceState>
+final class ApplyChangelogStateSerializer
+        implements AccumulatorStateSerializer<ApplyChangelogState>
 {
-    private final Type innerType;
-
     private final Type serializedType;
 
-    public ChangelogCoalesceStateSerializer(Type innerType)
+    public ApplyChangelogStateSerializer(Type innerType)
     {
-        this.innerType = requireNonNull(innerType, "innerType is null");
         this.serializedType = getSerializedRowType(innerType);
     }
 
@@ -49,7 +44,7 @@ final class ChangelogCoalesceStateSerializer
     }
 
     @Override
-    public void serialize(ChangelogCoalesceState state, BlockBuilder out)
+    public void serialize(ApplyChangelogState state, BlockBuilder out)
     {
         if (state.get() == null) {
             out.appendNull();
@@ -60,7 +55,7 @@ final class ChangelogCoalesceStateSerializer
     }
 
     @Override
-    public void deserialize(Block block, int index, ChangelogCoalesceState state)
+    public void deserialize(Block block, int index, ApplyChangelogState state)
     {
         ChangelogRecord record = new ChangelogRecord(state.getType());
         record.deserialize(block, index);

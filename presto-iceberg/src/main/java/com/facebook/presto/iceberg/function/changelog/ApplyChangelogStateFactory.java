@@ -18,37 +18,37 @@ import com.facebook.presto.spi.function.AccumulatorStateFactory;
 
 import static java.util.Objects.requireNonNull;
 
-public class ChangelogCoalesceStateFactory
-        implements AccumulatorStateFactory<ChangelogCoalesceState>
+public class ApplyChangelogStateFactory
+        implements AccumulatorStateFactory<ApplyChangelogState>
 {
     private final Type type;
 
-    public ChangelogCoalesceStateFactory(Type type)
+    public ApplyChangelogStateFactory(Type type)
     {
         this.type = requireNonNull(type, "type is null");
     }
 
     @Override
-    public ChangelogCoalesceState createSingleState()
+    public ApplyChangelogState createSingleState()
     {
-        return new ChangelogCoalesceState.Single(type);
+        return new ApplyChangelogState.Single(type);
     }
 
     @Override
-    public Class<? extends ChangelogCoalesceState> getSingleStateClass()
+    public Class<? extends ApplyChangelogState> getSingleStateClass()
     {
-        return ChangelogCoalesceState.Single.class;
+        return ApplyChangelogState.Single.class;
     }
 
     @Override
-    public ChangelogCoalesceState.Grouped createGroupedState()
+    public ApplyChangelogState.Grouped createGroupedState()
     {
-        return new ChangelogCoalesceState.Grouped(type);
+        return new ApplyChangelogState.Grouped(type);
     }
 
     @Override
-    public Class<? extends ChangelogCoalesceState> getGroupedStateClass()
+    public Class<? extends ApplyChangelogState> getGroupedStateClass()
     {
-        return ChangelogCoalesceState.Grouped.class;
+        return ApplyChangelogState.Grouped.class;
     }
 }

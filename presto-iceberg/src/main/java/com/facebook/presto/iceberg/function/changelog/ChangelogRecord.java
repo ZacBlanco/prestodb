@@ -27,6 +27,7 @@ import com.facebook.presto.spi.StandardErrorCode;
 import com.google.common.collect.ImmutableList;
 import io.airlift.slice.Slice;
 import io.airlift.slice.Slices;
+import org.apache.iceberg.ChangelogOperation;
 import org.openjdk.jol.info.ClassLayout;
 
 import static com.facebook.presto.common.type.BigintType.BIGINT;
@@ -53,24 +54,21 @@ public class ChangelogRecord
         this.stateType = requireNonNull(stateType, "type is null");
         this.serializedType = getSerializedRowType(stateType);
         this.lastOperation = Slices.EMPTY_SLICE;
+        this.lastOrdinal = -1; // ensures this assumes the values from the first merge.
+    }
+
+    public ChangelogRecord(Type stateType, int lastOrdinal, Slice lastOperation, Block lastRow)
+
+    {
+        this(stateType);
+        this.lastOrdinal = lastOrdinal;
+        this.lastOperation = lastOperation;
+        this.lastRow = lastRow;
     }
 
     public void add(Integer ordinal, Slice operation, Block row)
     {
-        // don't need to do anything to this current row's state if the operation
-        // being applied is older
-        if (ordinal < lastOrdinal) {
-            return;
-        }
-
-        if (ordinal == lastOrdinal &&
-                lastOperation.toStringUtf8().equalsIgnoreCase("INSERT")) {
-            throw new PrestoException(StandardErrorCode.INVALID_FUNCTION_ARGUMENT, "somehow got a 2nd insert or delete on the same ordinal");
-        }
-
-        lastOrdinal = ordinal;
-        lastOperation = operation;
-        lastRow = row;
+        merge(new ChangelogRecord(stateType, ordinal, operation, row));
     }
 
     public Block getRow()
@@ -98,21 +96,22 @@ public class ChangelogRecord
         else if (other.lastOrdinal == lastOrdinal) {
             // ordinals are equal. In the case both operations are inserts, we
             // don't have a way to break ties. Likely an error, throw exception
-            switch (other.lastOperation.toStringUtf8().toUpperCase()) {
-                case "INSERT":
-                    if (lastOperation.toStringUtf8().equalsIgnoreCase("INSERT")) {
+            ChangelogOperation operation = ChangelogOperation.valueOf(other.lastOperation.toStringUtf8().toUpperCase());
+            switch (operation) {
+                case INSERT:
+                    if (ChangelogOperation.valueOf(lastOperation.toStringUtf8().toUpperCase()).equals(ChangelogOperation.INSERT)) {
                         throw new PrestoException(StandardErrorCode.GENERIC_INTERNAL_ERROR, "unresolvable order for two inserts");
                     }
                     lastOperation = other.lastOperation;
                     lastRow = other.lastRow;
                     lastOrdinal = other.lastOrdinal;
                     break;
-                case "DELETE":
-                    // in the case of delete, do nothing
+                case DELETE:
+                    // in the case of delete, do nothing, keep the current state
                     break;
                 default:
                     if (!other.lastOperation.toStringUtf8().isEmpty()) {
-                        throw new PrestoException(StandardErrorCode.GENERIC_INTERNAL_ERROR, "unknown operation type");
+                        throw new PrestoException(StandardErrorCode.GENERIC_INTERNAL_ERROR, "unsupported operation type " + operation);
                     }
             }
         }

@@ -20,7 +20,7 @@ import com.facebook.presto.spi.function.AccumulatorState;
 
 import static java.util.Objects.requireNonNull;
 
-public interface ChangelogCoalesceState
+public interface ApplyChangelogState
         extends AccumulatorState
 {
     public Type getType();
@@ -30,7 +30,7 @@ public interface ChangelogCoalesceState
     void set(ChangelogRecord value);
 
     class Single
-            implements ChangelogCoalesceState
+            implements ApplyChangelogState
     {
         private final Type innerType;
         ChangelogRecord record;
@@ -70,7 +70,7 @@ public interface ChangelogCoalesceState
 
     class Grouped
             extends AbstractGroupedAccumulatorState
-            implements ChangelogCoalesceState
+            implements ApplyChangelogState
     {
         private final ObjectBigArray<ChangelogRecord> records = new ObjectBigArray<>();
         private long size;

@@ -13,7 +13,7 @@
  */
 package com.facebook.presto.iceberg;
 
-import com.facebook.presto.iceberg.function.changelog.ChangelogCoalesceFunction;
+import com.facebook.presto.iceberg.function.changelog.ApplyChangelogFunction;
 import com.facebook.presto.spi.Plugin;
 import com.facebook.presto.spi.connector.ConnectorFactory;
 import com.google.common.collect.ImmutableList;
@@ -34,7 +34,7 @@ public class IcebergPlugin
     public Set<Class<?>> getFunctions()
     {
         return ImmutableSet.<Class<?>>builder()
-                .add(ChangelogCoalesceFunction.class)
+                .add(ApplyChangelogFunction.class)
                 .build();
     }
 }

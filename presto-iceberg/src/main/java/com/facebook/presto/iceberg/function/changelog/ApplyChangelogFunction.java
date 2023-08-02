@@ -33,6 +33,7 @@ import com.facebook.presto.spi.function.aggregation.AggregationMetadata;
 import com.facebook.presto.spi.function.aggregation.GroupedAccumulator;
 import com.google.common.collect.ImmutableList;
 import io.airlift.slice.Slice;
+import org.apache.iceberg.ChangelogOperation;
 
 import java.lang.invoke.MethodHandle;
 import java.util.List;
@@ -50,18 +51,18 @@ import static com.facebook.presto.spi.function.aggregation.AggregationMetadata.P
 import static com.facebook.presto.util.Reflection.methodHandle;
 import static com.google.common.collect.ImmutableList.toImmutableList;
 
-public class ChangelogCoalesceFunction
+public class ApplyChangelogFunction
         extends SqlAggregationFunction
 {
     @FunctionInstance
-    public static final ChangelogCoalesceFunction CHANGELOG_COALESCE_FUNCTION = new ChangelogCoalesceFunction();
-    private static final String NAME = "coalesce_changelog";
+    public static final ApplyChangelogFunction APPLY_CHANGELOG_FUNCTION = new ApplyChangelogFunction();
+    private static final String NAME = "apply_changelog";
 
-    private static final MethodHandle INPUT_FUNCTION = methodHandle(ChangelogCoalesceFunction.class, "input", Type.class, ChangelogCoalesceState.class, long.class, Slice.class, int.class, Block.class);
-    private static final MethodHandle COMBINE_FUNCTION = methodHandle(ChangelogCoalesceFunction.class, "combine", Type.class, ChangelogCoalesceState.class, ChangelogCoalesceState.class);
-    private static final MethodHandle OUTPUT_FUNCTION = methodHandle(ChangelogCoalesceFunction.class, "output", Type.class, ChangelogCoalesceState.class, BlockBuilder.class);
+    private static final MethodHandle INPUT_FUNCTION = methodHandle(ApplyChangelogFunction.class, "input", Type.class, ApplyChangelogState.class, long.class, Slice.class, int.class, Block.class);
+    private static final MethodHandle COMBINE_FUNCTION = methodHandle(ApplyChangelogFunction.class, "combine", Type.class, ApplyChangelogState.class, ApplyChangelogState.class);
+    private static final MethodHandle OUTPUT_FUNCTION = methodHandle(ApplyChangelogFunction.class, "output", Type.class, ApplyChangelogState.class, BlockBuilder.class);
 
-    protected ChangelogCoalesceFunction()
+    protected ApplyChangelogFunction()
     {
         super(NAME, ImmutableList.of(typeVariable("T")),
                 ImmutableList.of(),
@@ -71,16 +72,16 @@ public class ChangelogCoalesceFunction
 
     private static BuiltInAggregationFunctionImplementation generateAggregation(Type type)
     {
-        DynamicClassLoader classLoader = new DynamicClassLoader(ChangelogCoalesceFunction.class.getClassLoader());
-        AccumulatorStateSerializer<?> stateSerializer = new ChangelogCoalesceStateSerializer(type);
-        AccumulatorStateFactory<?> stateFactory = new ChangelogCoalesceStateFactory(type);
+        DynamicClassLoader classLoader = new DynamicClassLoader(ApplyChangelogFunction.class.getClassLoader());
+        AccumulatorStateSerializer<?> stateSerializer = new ApplyChangelogStateSerializer(type);
+        AccumulatorStateFactory<?> stateFactory = new ApplyChangelogStateFactory(type);
         List<Type> inputTypes = ImmutableList.of(BigintType.BIGINT, VarcharType.VARCHAR, type);
         Type intermediateType = stateSerializer.getSerializedType();
         List<AggregationMetadata.ParameterMetadata> inputParameterMetadata = createInputParameterMetadata(type);
         MethodHandle inputFunction = INPUT_FUNCTION.bindTo(type);
         MethodHandle combineFunction = COMBINE_FUNCTION.bindTo(type);
         MethodHandle outputFunction = OUTPUT_FUNCTION.bindTo(type);
-        Class<? extends AccumulatorState> stateInterface = ChangelogCoalesceState.class;
+        Class<? extends AccumulatorState> stateInterface = ApplyChangelogState.class;
 
         AggregationMetadata metadata = new AggregationMetadata(
                 generateAggregationName(NAME, type.getTypeSignature(), inputTypes.stream().map(Type::getTypeSignature).collect(toImmutableList())),
@@ -117,7 +118,7 @@ public class ChangelogCoalesceFunction
                 new AggregationMetadata.ParameterMetadata(BLOCK_INPUT_CHANNEL, type));
     }
 
-    public static void input(Type type, ChangelogCoalesceState state, long ordinal, Slice operation, int position, Block value)
+    public static void input(Type type, ApplyChangelogState state, long ordinal, Slice operation, int position, Block value)
     {
         ChangelogRecord record = state.get();
         if (record == null) {
@@ -127,14 +128,14 @@ public class ChangelogCoalesceFunction
         state.set(record);
     }
 
-    public static void combine(Type type, ChangelogCoalesceState state, ChangelogCoalesceState otherState)
+    public static void combine(Type type, ApplyChangelogState state, ApplyChangelogState otherState)
     {
         ChangelogRecord r = Optional.ofNullable(state.get())
                 .map(actual -> Optional.ofNullable(otherState.get()).map(actual::merge).orElse(actual)).orElse(otherState.get());
         state.set(r);
     }
 
-    public static void output(Type elementType, ChangelogCoalesceState state, BlockBuilder out)
+    public static void output(Type elementType, ApplyChangelogState state, BlockBuilder out)
     {
         ChangelogRecord record = state.get();
         if (record == null) {
@@ -142,7 +143,7 @@ public class ChangelogCoalesceFunction
             return;
         }
 
-        if (record.getLastOperation().toStringUtf8().equalsIgnoreCase("DELETE")) {
+        if (ChangelogOperation.valueOf(record.getLastOperation().toStringUtf8().toUpperCase()).equals(ChangelogOperation.DELETE)) {
             out.appendNull();
         }
         else {
@@ -160,7 +161,7 @@ public class ChangelogCoalesceFunction
     @Override
     public String getDescription()
     {
-        return "coalesces a set of records from a changelog into a single update or delete. Writes null if the record is deleted";
+        return "applies a set of records from a changelog into a single insert, update, or delete. The result of each set";
     }
 
     public interface State
