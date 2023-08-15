@@ -257,7 +257,7 @@ public final class IcebergUtil
                 (column, position) -> immutableEntry(column.name(), toIntExact(position)))
                 .collect(toImmutableMap(Entry::getKey, Entry::getValue));
     }
-    
+
     public static Map<Integer, String> getPartitionKeys(ContentScanTask<DataFile> scanTask)
     {
         StructLike partition = scanTask.file().partition();
