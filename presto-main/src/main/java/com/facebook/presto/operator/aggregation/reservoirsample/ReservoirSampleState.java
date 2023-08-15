@@ -13,6 +13,7 @@
  */
 package com.facebook.presto.operator.aggregation.reservoirsample;
 
+import com.facebook.presto.common.block.ArrayBlockBuilder;
 import com.facebook.presto.common.block.Block;
 import com.facebook.presto.common.block.BlockBuilder;
 import com.facebook.presto.common.type.ArrayType;
@@ -34,6 +35,7 @@ public class ReservoirSampleState
     {
         sample = new ReservoirSample(type);
         arrayType = new ArrayType(type);
+        initialSample = new ArrayBlockBuilder(arrayType, null, 1).appendNull().build();
     }
 
     public ReservoirSampleState(ReservoirSampleState other)
@@ -44,16 +46,10 @@ public class ReservoirSampleState
         this.initialSeenCount = other.initialSeenCount;
     }
 
-    public void initializeInitialSample(Block initialSample)
-    {
-        if (this.initialSample == null) {
-            this.initialSample = initialSample;
-        }
-    }
-
-    public void initializeInitialSeenCount(long initialSeenCount)
+    public void initializeInitialSample(Block initialSample, long initialSeenCount)
     {
         if (this.initialSeenCount < 0) {
+            this.initialSample = initialSample;
             this.initialSeenCount = initialSeenCount;
         }
     }
@@ -77,8 +73,7 @@ public class ReservoirSampleState
     public void mergeWith(ReservoirSampleState otherState)
     {
         sample.merge(otherState.sample);
-        initializeInitialSample(otherState.getInitialSample());
-        initializeInitialSeenCount(otherState.getInitialSeenCount());
+        initializeInitialSample(otherState.getInitialSample(), otherState.getInitialSeenCount());
     }
 
     public ReservoirSample getSamples()

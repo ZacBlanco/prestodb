@@ -81,7 +81,6 @@ public class ReservoirSampleStateSerializer
         }
         ReservoirSample reservoirSample = new ReservoirSample(elementType, seenCount, maxSampleSize, samples);
         state.setSample(reservoirSample);
-        state.initializeInitialSample(initialSample);
-        state.initializeInitialSeenCount(initialSeenCount);
+        state.initializeInitialSample(initialSample, initialSeenCount);
     }
 }

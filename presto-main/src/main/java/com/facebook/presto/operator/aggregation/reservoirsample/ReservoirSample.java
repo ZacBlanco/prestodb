@@ -26,6 +26,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import static com.facebook.presto.common.type.BigintType.BIGINT;
 import static com.facebook.presto.common.type.IntegerType.INTEGER;
 import static com.google.common.base.Preconditions.checkArgument;
+import static java.lang.Math.max;
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
@@ -92,7 +93,7 @@ public class ReservoirSample
 
     public void initializeSample(int n)
     {
-        samples = new ArrayList<>(n);
+        samples = new ArrayList<>(max(n, 0));
         maxSampleSize = n;
     }
 

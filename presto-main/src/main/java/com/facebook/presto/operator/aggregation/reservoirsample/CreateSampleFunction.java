@@ -51,6 +51,7 @@ import static com.facebook.presto.spi.function.aggregation.AggregationMetadata.P
 import static com.facebook.presto.util.Reflection.methodHandle;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.collect.ImmutableList.toImmutableList;
+import static java.lang.Math.max;
 
 public class CreateSampleFunction
         extends SqlAggregationFunction
@@ -65,7 +66,7 @@ public class CreateSampleFunction
     {
         super(NAME, ImmutableList.of(typeVariable("T")),
                 ImmutableList.of(),
-                parseTypeSignature("row(count integer, sample array(T))"),
+                parseTypeSignature("row(count bigint, sample array(T))"),
                 // initial sample array (scalar value), initial seen count (scalar value), new set of samples to insert, reservoir size (scalar)
                 ImmutableList.of(parseTypeSignature("array(T)"), BIGINT.getTypeSignature(), parseTypeSignature("T"), BIGINT.getTypeSignature()));
     }
@@ -133,8 +134,7 @@ public class CreateSampleFunction
     public static void input(Type type, ReservoirSampleState state, Block initialState, int pos, long seenCount, Block value, int position, long n)
     {
         state.add(value, position, n);
-        state.initializeInitialSample(initialState);
-        state.initializeInitialSeenCount(seenCount);
+        state.initializeInitialSample(initialState, seenCount);
     }
 
     public static void combine(Type type, ReservoirSampleState state, ReservoirSampleState otherState)
@@ -151,10 +151,10 @@ public class CreateSampleFunction
         List<Block> samples = IntStream.range(0, initialSampleBlock.getPositionCount())
                 .mapToObj(initialSampleBlock::getSingleValueBlock)
                 .collect(Collectors.toList());
-        if (initialSeenCount != initialSampleBlock.getPositionCount()) {
+        if (initialSeenCount != -1 && initialSeenCount != initialSampleBlock.getPositionCount()) {
             checkArgument(reservoirSample.getMaxSampleSize() == initialSampleBlock.getPositionCount(), "initial sample size must be equal to the sample size");
         }
-        ReservoirSample finalSample = new ReservoirSample(elementType, initialSeenCount, reservoirSample.getMaxSampleSize(), new ArrayList<>(samples));
+        ReservoirSample finalSample = new ReservoirSample(elementType, max(initialSeenCount, 0), reservoirSample.getMaxSampleSize(), new ArrayList<>(samples));
         finalSample.merge(reservoirSample);
         Type arrayType = new ArrayType(elementType);
         long count = finalSample.getSeenCount();
