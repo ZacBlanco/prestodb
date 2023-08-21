@@ -15,19 +15,14 @@ package com.facebook.presto.iceberg;
 
 import com.facebook.airlift.json.JsonCodec;
 import com.facebook.airlift.log.Logger;
-import com.facebook.presto.common.block.Block;
 import com.facebook.presto.common.predicate.TupleDomain;
 import com.facebook.presto.common.type.DecimalType;
 import com.facebook.presto.common.type.TypeManager;
 import com.facebook.presto.hive.HdfsEnvironment;
-import com.facebook.presto.hive.HiveBasicStatistics;
-import com.facebook.presto.hive.HiveColumnHandle;
 import com.facebook.presto.hive.HiveWrittenPartitions;
-import com.facebook.presto.hive.metastore.DateStatistics;
 import com.facebook.presto.hive.metastore.HiveColumnStatistics;
 import com.facebook.presto.hive.metastore.MetastoreUtil;
 import com.facebook.presto.hive.metastore.Statistics;
-import com.facebook.presto.hive.statistics.MetastoreHiveStatisticsProvider;
 import com.facebook.presto.iceberg.changelog.ChangelogUtil;
 import com.facebook.presto.iceberg.samples.SampleUtil;
 import com.facebook.presto.spi.ColumnHandle;
@@ -59,7 +54,6 @@ import com.facebook.presto.spi.statistics.TableStatistics;
 import com.facebook.presto.spi.statistics.TableStatisticsMetadata;
 import com.google.common.base.VerifyException;
 import com.google.common.cache.Cache;
-import com.google.common.cache.CacheBuilder;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
@@ -79,11 +73,9 @@ import org.joda.time.DateTimeZone;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.OptionalLong;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -102,7 +94,6 @@ import static com.facebook.presto.iceberg.IcebergUtil.createMetadataProperties;
 import static com.facebook.presto.iceberg.IcebergUtil.getColumnMetadatas;
 import static com.facebook.presto.iceberg.IcebergUtil.getColumns;
 import static com.facebook.presto.iceberg.IcebergUtil.getFileFormat;
-import static com.facebook.presto.iceberg.IcebergUtil.getNativeIcebergTable;
 import static com.facebook.presto.iceberg.IcebergUtil.getTableComment;
 import static com.facebook.presto.iceberg.IcebergUtil.resolveSnapshotIdByName;
 import static com.facebook.presto.iceberg.TableType.CHANGELOG;
@@ -410,8 +401,7 @@ public abstract class IcebergAbstractMetadata
      */
     public ConnectorTableHandle getTableHandleForStatisticsCollection(ConnectorSession session, SchemaTableName tableName, Map<String, Object> analyzeProperties)
     {
-        if (IcebergSessionProperties.useSampleStatistics(session))
-        {
+        if (IcebergSessionProperties.useSampleStatistics(session)) {
             IcebergTableName itn = IcebergTableName.from(tableName.getTableName());
             org.apache.iceberg.Table table = getIcebergTable(session, tableName);
             table = SampleUtil.getSampleTableFromActual(table, tableName.getSchemaName(), hdfsEnvironment, session);
@@ -435,17 +425,16 @@ public abstract class IcebergAbstractMetadata
     {
         Set<ColumnStatisticMetadata> columnStatistics = tableMetadata.getColumns().stream()
                 .filter(column -> !column.isHidden())
-                .map(meta ->  this.getColumnStatisticMetadata(session, meta))
+                .map(meta -> this.getColumnStatisticMetadata(session, meta))
                 .flatMap(List::stream)
                 .collect(toImmutableSet());
 
-        Set<TableStatisticType> tableStatistics =  ImmutableSet.of(ROW_COUNT);
+        Set<TableStatisticType> tableStatistics = ImmutableSet.of(ROW_COUNT);
         return new TableStatisticsMetadata(columnStatistics, tableStatistics, Collections.emptyList());
     }
 
     private List<ColumnStatisticMetadata> getColumnStatisticMetadata(ConnectorSession session, ColumnMetadata col)
     {
-
         return MetastoreUtil.getSupportedColumnStatistics(col.getType()).stream().map(x -> new ColumnStatisticMetadata(col.getName(), x)).collect(Collectors.toList());
     }
 
@@ -471,8 +460,7 @@ public abstract class IcebergAbstractMetadata
         computedStatistics.forEach(stat -> {
             AtomicLong rowCount = new AtomicLong(0);
             stat.getTableStatistics().forEach((key, value) -> {
-                if (key.equals(ROW_COUNT))
-                {
+                if (key.equals(ROW_COUNT)) {
                     verify(!value.isNull(0), "row count must not be nul");
                     rowCount.set(value.getLong(0));
                     builder.setRowCount(Estimate.of(rowCount.get()));
