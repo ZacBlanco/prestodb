@@ -13,12 +13,18 @@
  */
 package com.facebook.presto.hive;
 
+import com.facebook.presto.common.type.Type;
+import com.facebook.presto.hive.function.KllQuantileFunction;
+import com.facebook.presto.hive.function.aggregation.KllHistogramAggregation;
 import com.facebook.presto.hive.metastore.ExtendedHiveMetastore;
+import com.facebook.presto.hive.types.KllHistogramType;
 import com.facebook.presto.spi.Plugin;
 import com.facebook.presto.spi.connector.ConnectorFactory;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
 
 import java.util.Optional;
+import java.util.Set;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Strings.isNullOrEmpty;
@@ -46,6 +52,18 @@ public class HivePlugin
     public Iterable<ConnectorFactory> getConnectorFactories()
     {
         return ImmutableList.of(new HiveConnectorFactory(name, getClassLoader(), metastore));
+    }
+
+    @Override
+    public Set<Class<?>> getFunctions()
+    {
+        return ImmutableSet.of(KllHistogramAggregation.class, KllQuantileFunction.class);
+    }
+
+    @Override
+    public Iterable<Type> getTypes()
+    {
+        return ImmutableSet.of(KllHistogramType.KLL_HISTOGRAM);
     }
 
     private static ClassLoader getClassLoader()
