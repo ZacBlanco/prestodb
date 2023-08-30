@@ -28,13 +28,14 @@ import com.facebook.presto.spi.ConnectorNewTableLayout;
 import com.facebook.presto.spi.ConnectorOutputTableHandle;
 import com.facebook.presto.spi.ConnectorSession;
 import com.facebook.presto.spi.ConnectorTableHandle;
+import com.facebook.presto.spi.ConnectorTableLayoutHandle;
 import com.facebook.presto.spi.ConnectorTableMetadata;
+import com.facebook.presto.spi.Constraint;
 import com.facebook.presto.spi.PrestoException;
 import com.facebook.presto.spi.SchemaTableName;
 import com.facebook.presto.spi.SystemTable;
 import com.facebook.presto.spi.TableNotFoundException;
 import com.facebook.presto.spi.statistics.TableStatistics;
-import com.google.common.cache.Cache;
 import com.google.common.collect.ImmutableMap;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.PartitionSpec;
@@ -91,10 +92,9 @@ public class IcebergNativeMetadata
             HdfsEnvironment hdfsEnvironment,
             TypeManager typeManager,
             JsonCodec<CommitTaskData> commitTaskCodec,
-            CatalogType catalogType,
-            Cache<IcebergTableHandle, TableStatistics> statsCache)
+            CatalogType catalogType)
     {
-        super(typeManager, commitTaskCodec, hdfsEnvironment, statsCache);
+        super(typeManager, commitTaskCodec, hdfsEnvironment);
         this.resourceFactory = requireNonNull(resourceFactory, "resourceFactory is null");
         this.catalogType = requireNonNull(catalogType, "catalogType is null");
     }
@@ -301,5 +301,16 @@ public class IcebergNativeMetadata
         catch (NoSuchTableException e) {
             throw new TableNotFoundException(table);
         }
+    }
+
+    @Override
+    public TableStatistics getTableStatistics(ConnectorSession session, ConnectorTableHandle tableHandle, Optional<ConnectorTableLayoutHandle> tableLayoutHandle, List<ColumnHandle> columnHandles, Constraint<ColumnHandle> constraint)
+    {
+        IcebergTableHandle handle = (IcebergTableHandle) tableHandle;
+        Table icebergTable = getNativeIcebergTable(resourceFactory, session, handle.getSchemaTableName());
+        if (handle.getTableType() == SAMPLES) {
+            icebergTable = SampleUtil.getSampleTableFromActual(icebergTable, handle.getSchemaName(), hdfsEnvironment, session);
+        }
+        return TableStatisticsMaker.getTableStatistics(typeManager, constraint, handle, icebergTable, session, hdfsEnvironment);
     }
 }
