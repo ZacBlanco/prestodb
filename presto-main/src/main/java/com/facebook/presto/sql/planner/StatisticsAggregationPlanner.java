@@ -60,7 +60,7 @@ public class StatisticsAggregationPlanner
         this.functionAndTypeResolver = requireNonNull(functionAndTypeResolver, "functionAndTypeResolver is null");
     }
 
-    public TableStatisticAggregation createStatisticsAggregation(TableStatisticsMetadata statisticsMetadata, Map<String, VariableReferenceExpression> columnToVariableMap)
+    public TableStatisticAggregation createStatisticsAggregation(TableStatisticsMetadata statisticsMetadata, Map<String, VariableReferenceExpression> columnToVariableMap, boolean useSample)
     {
         StatisticAggregationsDescriptor.Builder<VariableReferenceExpression> descriptor = StatisticAggregationsDescriptor.builder();
 
@@ -99,7 +99,7 @@ public class StatisticsAggregationPlanner
             ColumnStatisticType statisticType = columnStatisticMetadata.getStatisticType();
             VariableReferenceExpression inputVariable = columnToVariableMap.get(columnName);
             verify(inputVariable != null, "inputVariable is null");
-            ColumnStatisticsAggregation aggregation = createColumnAggregation(statisticType, inputVariable);
+            ColumnStatisticsAggregation aggregation = createColumnAggregation(statisticType, inputVariable, useSample);
             VariableReferenceExpression variable = variableAllocator.newVariable(statisticType + ":" + columnName, aggregation.getOutputType());
             aggregations.put(variable, aggregation.getAggregation());
             descriptor.addColumnStatistic(columnStatisticMetadata, variable);
@@ -109,7 +109,7 @@ public class StatisticsAggregationPlanner
         return new TableStatisticAggregation(aggregation, descriptor.build());
     }
 
-    private ColumnStatisticsAggregation createColumnAggregation(ColumnStatisticType statisticType, VariableReferenceExpression input)
+    private ColumnStatisticsAggregation createColumnAggregation(ColumnStatisticType statisticType, VariableReferenceExpression input, boolean useSample)
     {
         switch (statisticType) {
             case MIN_VALUE:
@@ -117,7 +117,12 @@ public class StatisticsAggregationPlanner
             case MAX_VALUE:
                 return createAggregation("max", input, input.getType(), input.getType());
             case NUMBER_OF_DISTINCT_VALUES:
-                return createAggregation("approx_distinct", input, input.getType(), BIGINT);
+                if (useSample) {
+                    return createAggregation("ndv_estimator", input, input.getType(), BIGINT);
+                }
+                else {
+                    return createAggregation("approx_distinct", input, input.getType(), BIGINT);
+                }
             case NUMBER_OF_NON_NULL_VALUES:
                 return createAggregation("count", input, input.getType(), BIGINT);
             case NUMBER_OF_TRUE_VALUES:

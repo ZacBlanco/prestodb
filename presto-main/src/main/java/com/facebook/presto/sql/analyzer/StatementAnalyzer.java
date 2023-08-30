@@ -586,6 +586,8 @@ class StatementAnalyzer
         {
             analysis.setUpdateType("ANALYZE");
             QualifiedObjectName tableName = createQualifiedObjectName(session, node, node.getTableName());
+            QualifiedObjectName tableSampleName = createQualifiedObjectName(session, node, node.getSampleTableName());
+
             MetadataHandle metadataHandle = analysis.getMetadataHandle();
 
             // verify the target table exists, and it's not a view
@@ -606,15 +608,21 @@ class StatementAnalyzer
                     analysis.getParameters());
             TableHandle tableHandle = metadata.getTableHandleForStatisticsCollection(session, tableName, analyzeProperties)
                     .orElseThrow(() -> (new SemanticException(MISSING_TABLE, node, "Table '%s' does not exist", tableName)));
-
             // user must have read and insert permission in order to analyze stats of a table
             Multimap<QualifiedObjectName, Subfield> tableColumnMap = ImmutableMultimap.<QualifiedObjectName, Subfield>builder()
                     .putAll(tableName, metadataResolver.getColumnHandles(tableHandle).keySet().stream().map(column -> new Subfield(column, ImmutableList.of())).collect(toImmutableSet()))
                     .build();
             analysis.addTableColumnAndSubfieldReferences(accessControl, session.getIdentity(), session.getTransactionId(), session.getAccessControlContext(), tableColumnMap, tableColumnMap);
             analysis.addAccessControlCheckForTable(TABLE_INSERT, new AccessControlInfoForTable(accessControl, session.getIdentity(), session.getTransactionId(), session.getAccessControlContext(), tableName));
-
             analysis.setAnalyzeTarget(tableHandle);
+            // check if the sample is present, if so, use sample for analysis
+            Optional<TableHandle> sampleTableHandle = metadata.getTableHandleForStatisticsCollection(session, tableSampleName, analyzeProperties);
+            boolean useSample = sampleTableHandle.isPresent();
+            if (useSample) {
+                analysis.setSampleExist(true);
+                analysis.setAnalyzeSampleTarget(sampleTableHandle.get());
+                return createAndAssignScope(node, scope, Field.newUnqualified(node.getLocation(), "rows", BIGINT));
+            }
             return createAndAssignScope(node, scope, Field.newUnqualified(node.getLocation(), "rows", BIGINT));
         }
 
@@ -2860,6 +2868,11 @@ class StatementAnalyzer
         }
 
         private Scope createAndAssignScope(Node node, Optional<Scope> parentScope, Field... fields)
+        {
+            return createAndAssignScope(node, parentScope, new RelationType(fields));
+        }
+
+        private Scope createAndAssignScopeWithSample(Node node, Optional<Scope> parentScope, Field... fields)
         {
             return createAndAssignScope(node, parentScope, new RelationType(fields));
         }

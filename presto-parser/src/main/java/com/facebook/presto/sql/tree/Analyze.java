@@ -27,6 +27,7 @@ public class Analyze
 {
     private final QualifiedName tableName;
     private final List<Property> properties;
+    private QualifiedName sampleTableName;
 
     public Analyze(QualifiedName tableName, List<Property> properties)
     {
@@ -42,12 +43,28 @@ public class Analyze
     {
         super(location);
         this.tableName = requireNonNull(tableName, "table is null");
+        List<String> tables = tableName.getOriginalParts();
+        assert tables.size() == 1;
+        this.sampleTableName = QualifiedName.of(tables.get(0)+"_sample");
+        this.properties = ImmutableList.copyOf(requireNonNull(properties, "properties is null"));
+    }
+
+    private Analyze(Optional<NodeLocation> location, QualifiedName tableName, QualifiedName sampleTableName, List<Property> properties)
+    {
+        super(location);
+        this.tableName = requireNonNull(tableName, "table is null");
+        this.sampleTableName = sampleTableName;
         this.properties = ImmutableList.copyOf(requireNonNull(properties, "properties is null"));
     }
 
     public QualifiedName getTableName()
     {
         return tableName;
+    }
+
+    public QualifiedName getSampleTableName()
+    {
+        return sampleTableName;
     }
 
     public List<Property> getProperties()
