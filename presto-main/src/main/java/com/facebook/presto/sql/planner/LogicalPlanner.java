@@ -196,14 +196,8 @@ public class LogicalPlanner
 
     private RelationPlan createAnalyzePlan(Analysis analysis, Analyze analyzeStatement)
     {
-        TableHandle targetTable;
-        boolean useSample = analysis.isSampleExist();
-        if (useSample) {
-            targetTable = analysis.getAnalyzeSampleTarget().get();
-        }
-        else {
-            targetTable = analysis.getAnalyzeTarget().get();
-        }
+        TableHandle targetTable = analysis.getAnalyzeTarget().get();
+
         // Plan table scan
         Map<String, ColumnHandle> columnHandles = metadata.getColumnHandles(session, targetTable);
         ImmutableList.Builder<VariableReferenceExpression> tableScanOutputsBuilder = ImmutableList.builder();
@@ -223,7 +217,7 @@ public class LogicalPlanner
                 targetTable.getConnectorId().getCatalogName(),
                 tableMetadata.getMetadata());
 
-        TableStatisticAggregation tableStatisticAggregation = statisticsAggregationPlanner.createStatisticsAggregation(tableStatisticsMetadata, columnNameToVariable.build(), useSample);
+        TableStatisticAggregation tableStatisticAggregation = statisticsAggregationPlanner.createStatisticsAggregation(tableStatisticsMetadata, columnNameToVariable.build());
         StatisticAggregations statisticAggregations = tableStatisticAggregation.getAggregations();
 
         PlanNode planNode = new StatisticsWriterNode(
@@ -405,7 +399,7 @@ public class LogicalPlanner
                 .collect(toImmutableSet());
 
         if (!statisticsMetadata.isEmpty()) {
-            TableStatisticAggregation result = statisticsAggregationPlanner.createStatisticsAggregation(statisticsMetadata, columnToVariableMap, false);
+            TableStatisticAggregation result = statisticsAggregationPlanner.createStatisticsAggregation(statisticsMetadata, columnToVariableMap);
 
             StatisticAggregations.Parts aggregations = result.getAggregations().splitIntoPartialAndFinal(variableAllocator, metadata.getFunctionAndTypeManager());
 

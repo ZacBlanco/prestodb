@@ -167,8 +167,6 @@ public class Analysis
     private Optional<Insert> insert = Optional.empty();
     private Optional<RefreshMaterializedViewAnalysis> refreshMaterializedViewAnalysis = Optional.empty();
     private Optional<TableHandle> analyzeTarget = Optional.empty();
-    private Optional<TableHandle> analyzeSampleTarget = Optional.empty();
-    private boolean sampleExist = false;
 
     // for describe input and describe output
     private final boolean isDescribe;
@@ -300,16 +298,6 @@ public class Analysis
         return coercions.get(NodeRef.of(expression));
     }
 
-    public boolean isSampleExist()
-    {
-        return sampleExist;
-    }
-
-    public void setSampleExist(boolean sampleExist)
-    {
-        this.sampleExist = sampleExist;
-    }
-
     public void addLambdaArgumentReferences(Map<NodeRef<Identifier>, LambdaArgumentDeclaration> lambdaArgumentReferences)
     {
         this.lambdaArgumentReferences.putAll(lambdaArgumentReferences);
@@ -426,6 +414,7 @@ public class Analysis
                 .map(NodeRef::getNode)
                 .collect(toImmutableList());
     }
+
     public List<InPredicate> getInPredicateSubqueries(Node node)
     {
         return ImmutableList.copyOf(inPredicatesSubqueries.get(NodeRef.of(node)));
@@ -648,18 +637,9 @@ public class Analysis
         return analyzeTarget;
     }
 
-    public Optional<TableHandle> getAnalyzeSampleTarget()
-    {
-        return analyzeSampleTarget;
-    }
-
     public void setAnalyzeTarget(TableHandle analyzeTarget)
     {
         this.analyzeTarget = Optional.of(analyzeTarget);
-    }
-    public void setAnalyzeSampleTarget(TableHandle analyzeTarget)
-    {
-        this.analyzeSampleTarget = Optional.of(analyzeTarget);
     }
 
     public void setCreateTableProperties(Map<String, Expression> createTableProperties)
@@ -1000,7 +980,6 @@ public class Analysis
         }
         return functionMap.entrySet().stream().collect(toImmutableMap(Map.Entry::getKey, entry -> ImmutableSet.copyOf(entry.getValue())));
     }
-
 
     @Immutable
     public static final class Insert

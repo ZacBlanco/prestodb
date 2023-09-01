@@ -235,9 +235,7 @@ class Partition
         ImmutableMap.Builder<Integer, Object> map = ImmutableMap.builder();
         idToMetricMap.forEach((id, value) -> {
             Type.PrimitiveType type = idToTypeMapping.get(id);
-            if (type != null) {
-                map.put(id, Conversions.fromByteBuffer(type, value));
-            }
+            map.put(id, Conversions.fromByteBuffer(type, value));
         });
         return map.build();
     }
