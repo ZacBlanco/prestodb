@@ -15,7 +15,6 @@ package com.facebook.presto.hive.metastore;
 
 import com.facebook.presto.common.Page;
 import com.facebook.presto.common.block.Block;
-import com.facebook.presto.common.block.RowBlock;
 import com.facebook.presto.common.type.DecimalType;
 import com.facebook.presto.common.type.RowType;
 import com.facebook.presto.common.type.SqlDate;
@@ -42,6 +41,7 @@ import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.OptionalLong;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.facebook.presto.common.type.BigintType.BIGINT;
 import static com.facebook.presto.common.type.DateType.DATE;
@@ -337,12 +337,12 @@ public final class Statistics
                 .collect(toImmutableMap(Entry::getKey, entry -> createHiveColumnStatistics(session, timeZone, entry.getValue(), columnTypes.get(entry.getKey()), rowCount)));
     }
 
-    private static Map<String, Map<ColumnStatisticType, Block>> createColumnToComputedStatisticsMap(Map<ColumnStatisticMetadata, Block> computedStatistics)
+    private static Map<String, Map<ColumnStatisticMetadata, Block>> createColumnToComputedStatisticsMap(Map<ColumnStatisticMetadata, Block> computedStatistics)
     {
-        Map<String, Map<ColumnStatisticType, Block>> result = new HashMap<>();
+        Map<String, Map<ColumnStatisticMetadata, Block>> result = new HashMap<>();
         computedStatistics.forEach((metadata, block) -> {
-            Map<ColumnStatisticType, Block> columnStatistics = result.computeIfAbsent(metadata.getColumnName(), key -> new HashMap<>());
-            columnStatistics.put(metadata.getStatisticType(), block);
+            Map<ColumnStatisticMetadata, Block> columnStatistics = result.computeIfAbsent(metadata.getColumnName(), key -> new HashMap<>());
+            columnStatistics.put(metadata, block);
         });
         return result.entrySet()
                 .stream()
@@ -352,41 +352,44 @@ public final class Statistics
     private static HiveColumnStatistics createHiveColumnStatistics(
             ConnectorSession session,
             DateTimeZone timeZone,
-            Map<ColumnStatisticType, Block> computedStatistics,
+            Map<ColumnStatisticMetadata, Block> computedStatistics,
             Type columnType,
             long rowCount)
     {
         HiveColumnStatistics.Builder result = HiveColumnStatistics.builder();
-
+        Map<ColumnStatisticType, Block> computedStatisticsTypes = computedStatistics.entrySet().stream().collect(Collectors.toMap(
+                e -> e.getKey().getStatisticType(), Entry::getValue));
         // MIN_VALUE, MAX_VALUE
         // We ask the engine to compute either both or neither
-        verify(computedStatistics.containsKey(MIN_VALUE) == computedStatistics.containsKey(MAX_VALUE));
-        if (computedStatistics.containsKey(MIN_VALUE)) {
-            setMinMax(session, timeZone, columnType, computedStatistics.get(MIN_VALUE), computedStatistics.get(MAX_VALUE), result);
+        verify(computedStatisticsTypes.containsKey(MIN_VALUE) == computedStatisticsTypes.containsKey(MAX_VALUE));
+        if (computedStatisticsTypes.containsKey(MIN_VALUE)) {
+            setMinMax(session, timeZone, columnType, computedStatisticsTypes.get(MIN_VALUE), computedStatisticsTypes.get(MAX_VALUE), result);
         }
 
         // MAX_VALUE_SIZE_IN_BYTES
-        if (computedStatistics.containsKey(MAX_VALUE_SIZE_IN_BYTES)) {
-            result.setMaxValueSizeInBytes(getIntegerValue(session, BIGINT, computedStatistics.get(MAX_VALUE_SIZE_IN_BYTES)));
+        if (computedStatisticsTypes.containsKey(MAX_VALUE_SIZE_IN_BYTES)) {
+            result.setMaxValueSizeInBytes(getIntegerValue(session, BIGINT, computedStatisticsTypes.get(MAX_VALUE_SIZE_IN_BYTES)));
         }
 
         // TOTAL_VALUES_SIZE_IN_BYTES
-        if (computedStatistics.containsKey(TOTAL_SIZE_IN_BYTES)) {
-            result.setTotalSizeInBytes(getIntegerValue(session, BIGINT, computedStatistics.get(TOTAL_SIZE_IN_BYTES)));
+        if (computedStatisticsTypes.containsKey(TOTAL_SIZE_IN_BYTES)) {
+            result.setTotalSizeInBytes(getIntegerValue(session, BIGINT, computedStatisticsTypes.get(TOTAL_SIZE_IN_BYTES)));
         }
 
         // NUMBER OF NULLS
-        if (computedStatistics.containsKey(NUMBER_OF_NON_NULL_VALUES)) {
-            result.setNullsCount(rowCount - BIGINT.getLong(computedStatistics.get(NUMBER_OF_NON_NULL_VALUES), 0));
+        if (computedStatisticsTypes.containsKey(NUMBER_OF_NON_NULL_VALUES)) {
+            result.setNullsCount(rowCount - BIGINT.getLong(computedStatisticsTypes.get(NUMBER_OF_NON_NULL_VALUES), 0));
         }
 
         // NDV
-        if (computedStatistics.containsKey(NUMBER_OF_DISTINCT_VALUES) && computedStatistics.containsKey(NUMBER_OF_NON_NULL_VALUES)) {
+        if (computedStatisticsTypes.containsKey(NUMBER_OF_DISTINCT_VALUES) && computedStatisticsTypes.containsKey(NUMBER_OF_NON_NULL_VALUES)) {
             // number of distinct value is estimated using HLL, and can be higher than the number of non null values
-            long numberOfNonNullValues = BIGINT.getLong(computedStatistics.get(NUMBER_OF_NON_NULL_VALUES), 0);
+            long numberOfNonNullValues = BIGINT.getLong(computedStatisticsTypes.get(NUMBER_OF_NON_NULL_VALUES), 0);
             long numberOfDistinctValues;
-            Block ndvBlock = computedStatistics.get(NUMBER_OF_DISTINCT_VALUES);
-            if (computedStatistics.get(NUMBER_OF_DISTINCT_VALUES) instanceof RowBlock) {
+            Block ndvBlock = computedStatisticsTypes.get(NUMBER_OF_DISTINCT_VALUES);
+            String ndvFunction = computedStatistics.keySet().stream().filter(i ->
+                    i.getStatisticType().equals(NUMBER_OF_DISTINCT_VALUES)).findFirst().get().getFunctionName();
+            if (ndvFunction.equals("ndv_estimator")) {
                 Type ndvEstimatorOutputType = RowType.from(Arrays.asList(
                         new RowType.Field(Optional.of("ndv"), BIGINT), new RowType.Field(Optional.of("errorBound"), DOUBLE)));
                 Block ndvRowBlock = (Block) ndvEstimatorOutputType.getObject(ndvBlock, 0);
@@ -404,9 +407,9 @@ public final class Statistics
         }
 
         // NUMBER OF FALSE, NUMBER OF TRUE
-        if (computedStatistics.containsKey(NUMBER_OF_TRUE_VALUES) && computedStatistics.containsKey(NUMBER_OF_NON_NULL_VALUES)) {
-            long numberOfTrue = BIGINT.getLong(computedStatistics.get(NUMBER_OF_TRUE_VALUES), 0);
-            long numberOfNonNullValues = BIGINT.getLong(computedStatistics.get(NUMBER_OF_NON_NULL_VALUES), 0);
+        if (computedStatisticsTypes.containsKey(NUMBER_OF_TRUE_VALUES) && computedStatisticsTypes.containsKey(NUMBER_OF_NON_NULL_VALUES)) {
+            long numberOfTrue = BIGINT.getLong(computedStatisticsTypes.get(NUMBER_OF_TRUE_VALUES), 0);
+            long numberOfNonNullValues = BIGINT.getLong(computedStatisticsTypes.get(NUMBER_OF_NON_NULL_VALUES), 0);
             result.setBooleanStatistics(new BooleanStatistics(OptionalLong.of(numberOfTrue), OptionalLong.of(numberOfNonNullValues - numberOfTrue)));
         }
         return result.build();
