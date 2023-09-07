@@ -113,6 +113,7 @@ import static com.facebook.presto.iceberg.changelog.ChangelogUtil.getRowTypeFrom
 import static com.facebook.presto.spi.StandardErrorCode.GENERIC_INTERNAL_ERROR;
 import static com.facebook.presto.spi.StandardErrorCode.INVALID_ARGUMENTS;
 import static com.facebook.presto.spi.StandardErrorCode.NOT_SUPPORTED;
+import static com.facebook.presto.spi.statistics.ColumnStatisticType.NUMBER_OF_DISTINCT_VALUES;
 import static com.facebook.presto.spi.statistics.TableStatisticType.ROW_COUNT;
 import static com.google.common.base.Verify.verify;
 import static com.google.common.collect.ImmutableList.toImmutableList;
@@ -504,7 +505,7 @@ public abstract class IcebergAbstractMetadata
             org.apache.iceberg.Table table = getIcebergTable(session, tableName);
             boolean isSampleExist = SampleUtil.sampleTableExists(table, tableName.getSchemaName(), hdfsEnvironment, session);
             if (isSampleExist) {
-                this.useSampleForAnalyze = true;
+                useSampleForAnalyze = true;
                 table = SampleUtil.getSampleTableFromActual(table, tableName.getSchemaName(), hdfsEnvironment, session);
                 Optional<Long> snapshotId = resolveSnapshotIdByName(table, itn);
                 return new IcebergTableHandle(
@@ -541,7 +542,7 @@ public abstract class IcebergAbstractMetadata
     {
         return MetastoreUtil.getSupportedColumnStatistics(col.getType()).stream().map(x ->
         {
-            if (this.useSampleForAnalyze && useSampleStatistics(session) && x.name().equals("NUMBER_OF_DISTINCT_VALUES")) {
+            if (useSampleForAnalyze && useSampleStatistics(session) && x.equals(NUMBER_OF_DISTINCT_VALUES)) {
                 return x.getColumnStatisticMetadataWithCustomFunction(col.getName(), "ndv_estimator");
             }
             else {
