@@ -542,7 +542,14 @@ public abstract class IcebergAbstractMetadata
             stat.getTableStatistics().forEach((key, value) -> {
                 if (key.equals(ROW_COUNT)) {
                     verify(!value.isNull(0), "row count must not be nul");
-                    rowCount.set(value.getLong(0));
+                    if (useSampleForAnalyze) {
+                        Table table = getIcebergTable(session, ((IcebergTableHandle) tableHandle).getSchemaTableName());
+                        int rowCountFromSampleProperty = Integer.parseInt(table.properties().get("sample.processed_count")) - Integer.parseInt(table.properties().get("sample.deleted_count"));
+                        rowCount.set(rowCountFromSampleProperty);
+                    }
+                    else {
+                        rowCount.set(value.getLong(0));
+                    }
                     builder.setRowCount(Estimate.of(rowCount.get()));
                 }
             });
