@@ -96,9 +96,11 @@ import static com.facebook.presto.common.type.RealType.REAL;
 import static com.facebook.presto.common.type.SmallintType.SMALLINT;
 import static com.facebook.presto.common.type.TinyintType.TINYINT;
 import static com.facebook.presto.iceberg.IcebergColumnHandle.primitiveIcebergColumnHandle;
+import static com.facebook.presto.iceberg.IcebergSchemaProperties.LOCATION_PROPERTY;
 import static com.facebook.presto.iceberg.IcebergSessionProperties.useSampleStatistics;
-import static com.facebook.presto.iceberg.IcebergUtil.createMetadataProperties;
-import static com.facebook.presto.iceberg.IcebergUtil.getColumnMetadatas;
+import static com.facebook.presto.iceberg.IcebergTableProperties.FILE_FORMAT_PROPERTY;
+import static com.facebook.presto.iceberg.IcebergTableProperties.FORMAT_VERSION;
+import static com.facebook.presto.iceberg.IcebergTableProperties.PARTITIONING_PROPERTY;
 import static com.facebook.presto.iceberg.IcebergUtil.getColumns;
 import static com.facebook.presto.iceberg.IcebergUtil.getFileFormat;
 import static com.facebook.presto.iceberg.IcebergUtil.getTableComment;
@@ -577,7 +579,11 @@ public abstract class IcebergAbstractMetadata
                     verify(!value.isNull(0), "row count must not be nul");
                     if (useSampleForAnalyze) {
                         Table table = getIcebergTable(session, ((IcebergTableHandle) tableHandle).getSchemaTableName());
-                        int rowCountFromSampleProperty = Integer.parseInt(table.properties().get("sample.processed_count")) - Integer.parseInt(table.properties().get("sample.deleted_count"));
+                        Map<String, String> tableProperties = table.properties();
+                        verify(tableProperties.containsKey("sample.processed_count"),
+                                "when using sample for Analyze, the sample table should have necessary information (sample.processed_count) to get row count");
+                        int deletedRows = Integer.parseInt(tableProperties.getOrDefault("sample.deleted_count", "0"));
+                        int rowCountFromSampleProperty = Integer.parseInt(tableProperties.get("sample.processed_count")) - deletedRows;
                         rowCount.set(rowCountFromSampleProperty);
                     }
                     else {
