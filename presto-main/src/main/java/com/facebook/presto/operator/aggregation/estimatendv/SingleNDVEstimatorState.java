@@ -20,7 +20,6 @@ import com.facebook.presto.operator.aggregation.histogram.SingleTypedHistogram;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.stream.LongStream;
 
 public class SingleNDVEstimatorState
         extends SingleHistogramState
