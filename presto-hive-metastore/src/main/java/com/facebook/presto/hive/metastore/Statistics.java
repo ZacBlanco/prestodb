@@ -381,7 +381,7 @@ public final class Statistics
         // NUMBER OF NULLS
         if (computedStatisticsTypes.containsKey(NUMBER_OF_NON_NULL_VALUES)) {
             long realRowCount = rowCount;
-            if (sampleRowCount.length == 1) {
+            if (sampleRowCount.length==1) {
                 realRowCount = sampleRowCount[0];
             }
             result.setNullsCount(realRowCount - BIGINT.getLong(computedStatisticsTypes.get(NUMBER_OF_NON_NULL_VALUES), 0));
