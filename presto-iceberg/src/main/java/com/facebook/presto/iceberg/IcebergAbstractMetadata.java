@@ -588,7 +588,6 @@ public abstract class IcebergAbstractMetadata
                         int deletedRows = Integer.parseInt(tableProperties.getOrDefault("sample.deleted_count", "0"));
                         int rowCountFromSampleProperty = Integer.parseInt(tableProperties.get("sample.processed_count")) - deletedRows;
                         rowCount.set(rowCountFromSampleProperty);
-
                     }
                     else {
                         rowCount.set(tableRC);
