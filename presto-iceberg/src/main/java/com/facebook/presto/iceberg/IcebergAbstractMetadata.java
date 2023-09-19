@@ -574,12 +574,9 @@ public abstract class IcebergAbstractMetadata
                 .collect(toImmutableMap(IcebergColumnHandle::getName, IcebergColumnHandle::getType));
         computedStatistics.forEach(stat -> {
             AtomicLong rowCount = new AtomicLong(0);
-            AtomicLong dataRowCount = new AtomicLong(0);
             stat.getTableStatistics().forEach((key, value) -> {
                 if (key.equals(ROW_COUNT)) {
                     verify(!value.isNull(0), "row count must not be nul");
-                    long tableRC = value.getLong(0);
-                    dataRowCount.set(tableRC);
                     if (useSampleForAnalyze) {
                         Table table = getIcebergTable(session, ((IcebergTableHandle) tableHandle).getSchemaTableName());
                         Map<String, String> tableProperties = table.properties();
@@ -588,27 +585,21 @@ public abstract class IcebergAbstractMetadata
                         int deletedRows = Integer.parseInt(tableProperties.getOrDefault("sample.deleted_count", "0"));
                         int rowCountFromSampleProperty = Integer.parseInt(tableProperties.get("sample.processed_count")) - deletedRows;
                         rowCount.set(rowCountFromSampleProperty);
-
                     }
                     else {
-                        rowCount.set(tableRC);
+                        rowCount.set(value.getLong(0));
                     }
                     builder.setRowCount(Estimate.of(rowCount.get()));
                 }
             });
-            Map<String, HiveColumnStatistics> columnStats;
-            if (useSampleForAnalyze) {
-                columnStats = Statistics.fromComputedStatistics(session, DateTimeZone.UTC, stat.getColumnStatistics(), types, rowCount.get(), dataRowCount.get());
-            }
-            else {
-                columnStats = Statistics.fromComputedStatistics(session, DateTimeZone.UTC, stat.getColumnStatistics(), types, rowCount.get());
-            }
+            Map<String, HiveColumnStatistics> columnStats =
+                    Statistics.fromComputedStatistics(session, DateTimeZone.UTC, stat.getColumnStatistics(), types, rowCount.get());
             columnStats.forEach((key, value) -> {
                 IcebergColumnHandle ch = (IcebergColumnHandle) columns.get(key);
                 ColumnStatistics.Builder colBuilder = ColumnStatistics.builder();
-                value.getNullsCount().ifPresent(nullCount -> colBuilder.setNullsFraction(Estimate.of((double) nullCount / dataRowCount.get())));
+                value.getNullsCount().ifPresent(nullCount -> colBuilder.setNullsFraction(Estimate.of((double) nullCount / rowCount.get())));
                 value.getDistinctValuesCount().ifPresent(ndvs -> colBuilder.setDistinctValuesCount(Estimate.of(ndvs)));
-                value.getTotalSizeInBytes().ifPresent(totalDataSize -> colBuilder.setDataSize(Estimate.of((double) totalDataSize / dataRowCount.get())));
+                value.getTotalSizeInBytes().ifPresent(totalDataSize -> colBuilder.setDataSize(Estimate.of((double) totalDataSize / rowCount.get())));
                 if (isRangeSupported(ch.getType())) {
                     colBuilder.setRange(createRange(ch.getType(), value));
                 }

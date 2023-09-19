@@ -331,11 +331,10 @@ public final class Statistics
             DateTimeZone timeZone,
             Map<ColumnStatisticMetadata, Block> computedStatistics,
             Map<String, Type> columnTypes,
-            long rowCount,
-            long... sampleRowCount)
+            long rowCount)
     {
         return createColumnToComputedStatisticsMap(computedStatistics).entrySet().stream()
-                .collect(toImmutableMap(Entry::getKey, entry -> createHiveColumnStatistics(session, timeZone, entry.getValue(), columnTypes.get(entry.getKey()), rowCount, sampleRowCount)));
+                .collect(toImmutableMap(Entry::getKey, entry -> createHiveColumnStatistics(session, timeZone, entry.getValue(), columnTypes.get(entry.getKey()), rowCount)));
     }
 
     private static Map<String, Map<ColumnStatisticMetadata, Block>> createColumnToComputedStatisticsMap(Map<ColumnStatisticMetadata, Block> computedStatistics)
@@ -355,8 +354,7 @@ public final class Statistics
             DateTimeZone timeZone,
             Map<ColumnStatisticMetadata, Block> computedStatistics,
             Type columnType,
-            long rowCount,
-            long... sampleRowCount)
+            long rowCount)
     {
         HiveColumnStatistics.Builder result = HiveColumnStatistics.builder();
         Map<ColumnStatisticType, Block> computedStatisticsTypes = computedStatistics.entrySet().stream().collect(Collectors.toMap(
@@ -380,12 +378,9 @@ public final class Statistics
 
         // NUMBER OF NULLS
         if (computedStatisticsTypes.containsKey(NUMBER_OF_NON_NULL_VALUES)) {
-            long realRowCount = rowCount;
-            if (sampleRowCount.length==1) {
-                realRowCount = sampleRowCount[0];
-            }
-            result.setNullsCount(realRowCount - BIGINT.getLong(computedStatisticsTypes.get(NUMBER_OF_NON_NULL_VALUES), 0));
+            result.setNullsCount(rowCount - BIGINT.getLong(computedStatisticsTypes.get(NUMBER_OF_NON_NULL_VALUES), 0));
         }
+
         // NDV
         if (computedStatisticsTypes.containsKey(NUMBER_OF_DISTINCT_VALUES) && computedStatisticsTypes.containsKey(NUMBER_OF_NON_NULL_VALUES)) {
             // number of distinct value is estimated using HLL, and can be higher than the number of non null values
