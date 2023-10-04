@@ -17,10 +17,14 @@ import com.facebook.presto.Session;
 import com.facebook.presto.testing.QueryRunner;
 import com.facebook.presto.tests.AbstractTestQueryFramework;
 import com.google.common.io.Resources;
+import org.testng.ITest;
+import org.testng.annotations.BeforeMethod;
+import org.testng.annotations.DataProvider;
 import org.testng.annotations.Ignore;
 import org.testng.annotations.Test;
 
 import java.io.IOException;
+import java.lang.reflect.Method;
 
 import static com.facebook.presto.SystemSessionProperties.QUERY_MAX_EXECUTION_TIME;
 import static com.facebook.presto.SystemSessionProperties.QUERY_MAX_RUN_TIME;
@@ -28,15 +32,41 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 
 public abstract class AbstractTestNativeTpcdsQueries
         extends AbstractTestQueryFramework
+        implements ITest
 {
     String storageFormat = "DWRF";
-    Session session;
+
+    private String testName = "";
+
+    @BeforeMethod(alwaysRun = true)
+    public void setCustomTestcaseName(Method method, Object[] testData)
+    {
+        this.testName = method.getName();
+    }
+
+    @Override
+    public String getTestName()
+    {
+        return testName;
+    }
+
+    @DataProvider(name = "sessionProvider")
+    public Object[][] sessionConfigProvider()
+    {
+        QueryRunner queryRunner = (QueryRunner) getExpectedQueryRunner();
+        return new Object[][] {
+                new Object[] {
+                        Session.builder(queryRunner.getDefaultSession())
+                                .setSchema("tpcds")
+                                .setSystemProperty(QUERY_MAX_RUN_TIME, "2m")
+                                .setSystemProperty(QUERY_MAX_EXECUTION_TIME, "2m").build()}};
+    }
 
     @Override
     protected void createTables()
     {
         QueryRunner queryRunner = (QueryRunner) getExpectedQueryRunner();
-        this.session = Session.builder(queryRunner.getDefaultSession())
+        Session session = Session.builder(queryRunner.getDefaultSession())
                 .setSchema("tpcds")
                 .setSystemProperty(QUERY_MAX_RUN_TIME, "2m")
                 .setSystemProperty(QUERY_MAX_EXECUTION_TIME, "2m")
@@ -424,134 +454,134 @@ public abstract class AbstractTestNativeTpcdsQueries
         return sql;
     }
 
-    @Test
-    public void testTpcdsQ1()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ1(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("01"));
     }
 
-    @Test
-    public void testTpcdsQ2()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ2(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("02"));
     }
 
-    @Test
-    public void testTpcdsQ3()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ3(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("03"));
     }
 
-    @Test
-    public void testTpcdsQ4()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ4(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("04"));
     }
 
-    @Test
-    public void testTpcdsQ5()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ5(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("05"));
     }
 
-    @Test
-    public void testTpcdsQ6()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ6(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("06"));
     }
 
-    @Test
-    public void testTpcdsQ7()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ7(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("07"));
     }
 
-    @Test
-    public void testTpcdsQ8()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ8(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("08"));
     }
 
-    @Test
-    public void testTpcdsQ9()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ9(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("09"));
     }
 
-    @Test
-    public void testTpcdsQ10()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ10(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("10"));
     }
 
-    @Test
-    public void testTpcdsQ11()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ11(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("11"));
     }
 
-    @Test
-    public void testTpcdsQ12()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ12(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("12"));
     }
 
-    @Test
-    public void testTpcdsQ13()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ13(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("13"));
     }
 
-    @Test
-    public void testTpcdsQ14_1()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ14_1(Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("14_1"));
     }
 
-    @Test
-    public void testTpcdsQ14_2()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ14_2(Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("14_2"));
     }
 
-    @Test
-    public void testTpcdsQ15()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ15(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("15"));
     }
 
-    @Test
-    public void testTpcdsQ16()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ16(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("16"));
     }
 
-    @Test
-    public void testTpcdsQ17()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ17(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("17"));
     }
 
-    @Test
-    public void testTpcdsQ18()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ18(String propChange, Session session)
             throws Exception
     {
         // Results not equal:
@@ -562,78 +592,78 @@ public abstract class AbstractTestNativeTpcdsQueries
         assertQuerySucceeds(session, getTpcdsQuery("18"));
     }
 
-    @Test
-    public void testTpcdsQ19()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ19(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("19"));
     }
 
-    @Test
-    public void testTpcdsQ20()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ20(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("20"));
     }
 
-    @Test
-    public void testTpcdsQ21()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ21(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("21"));
     }
 
-    @Test
-    public void testTpcdsQ22()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ22(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("22"));
     }
 
-    @Test
-    public void testTpcdsQ23_1()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ23_1(Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("23_1"));
     }
 
-    @Test
-    public void testTpcdsQ23_2()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ23_2(Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("23_2"));
     }
 
-    @Test
-    public void testTpcdsQ24_1()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ24_1(Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("24_1"));
     }
 
-    @Test
-    public void testTpcdsQ24_2()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ24_2(Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("24_2"));
     }
 
-    @Test
-    public void testTpcdsQ25()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ25(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("25"));
     }
 
-    @Test
-    public void testTpcdsQ26()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ26(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("26"));
     }
 
-    @Test
-    public void testTpcdsQ27()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ27(String propChange, Session session)
             throws Exception
     {
         // Results not equal
@@ -644,8 +674,8 @@ public abstract class AbstractTestNativeTpcdsQueries
         assertQuerySucceeds(session, getTpcdsQuery("27"));
     }
 
-    @Test
-    public void testTpcdsQ28()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ28(String propChange, Session session)
             throws Exception
     {
         // Results not equal
@@ -656,253 +686,253 @@ public abstract class AbstractTestNativeTpcdsQueries
         assertQuerySucceeds(session, getTpcdsQuery("28"));
     }
 
-    @Test
-    public void testTpcdsQ29()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ29(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("29"));
     }
 
-    @Test
-    public void testTpcdsQ30()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ30(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("30"));
     }
 
-    @Test
-    public void testTpcdsQ31()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ31(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("31"));
     }
 
-    @Test
-    public void testTpcdsQ32()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ32(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("32"));
     }
 
-    @Test
-    public void testTpcdsQ33()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ33(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("33"));
     }
 
-    @Test
-    public void testTpcdsQ34()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ34(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("34"));
     }
 
-    @Test
-    public void testTpcdsQ35()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ35(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("35"));
     }
 
-    @Test
-    public void testTpcdsQ36()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ36(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("36"));
     }
 
-    @Test
-    public void testTpcdsQ37()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ37(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("37"));
     }
 
-    @Test
-    public void testTpcdsQ38()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ38(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("38"));
     }
 
-    @Test
-    public void testTpcdsQ39_1()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ39_1(Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("39_1"));
     }
 
-    @Test
-    public void testTpcdsQ39_2()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ39_2(Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("39_2"));
     }
 
-    @Test
-    public void testTpcdsQ40()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ40(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("40"));
     }
 
-    @Test
-    public void testTpcdsQ41()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ41(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("41"));
     }
 
-    @Test
-    public void testTpcdsQ42()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ42(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("42"));
     }
 
-    @Test
-    public void testTpcdsQ43()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ43(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("43"));
     }
 
-    @Test
-    public void testTpcdsQ44()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ44(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("44"));
     }
 
-    @Test
-    public void testTpcdsQ45()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ45(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("45"));
     }
 
-    @Test
-    public void testTpcdsQ46()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ46(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("46"));
     }
 
-    @Test
-    public void testTpcdsQ47()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ47(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("47"));
     }
 
-    @Test
-    public void testTpcdsQ48()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ48(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("48"));
     }
 
-    @Test
-    public void testTpcdsQ49()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ49(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("49"));
     }
 
-    @Test
-    public void testTpcdsQ50()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ50(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("50"));
     }
 
-    @Test
-    public void testTpcdsQ51()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ51(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("51"));
     }
 
-    @Test
-    public void testTpcdsQ52()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ52(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("52"));
     }
 
-    @Test
-    public void testTpcdsQ53()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ53(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("53"));
     }
 
-    @Test
-    public void testTpcdsQ54()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ54(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("54"));
     }
 
-    @Test
-    public void testTpcdsQ55()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ55(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("55"));
     }
 
-    @Test
-    public void testTpcdsQ56()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ56(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("56"));
     }
 
-    @Test
-    public void testTpcdsQ57()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ57(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("57"));
     }
 
-    @Test
-    public void testTpcdsQ58()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ58(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("58"));
     }
 
-    @Test
-    public void testTpcdsQ59()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ59(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("59"));
     }
 
-    @Test
-    public void testTpcdsQ60()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ60(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("60"));
     }
 
-    @Test
-    public void testTpcdsQ61()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ61(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("61"));
     }
 
-    @Test
-    public void testTpcdsQ62()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ62(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("62"));
     }
 
-    @Test
-    public void testTpcdsQ63()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ63(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("63"));
@@ -910,253 +940,253 @@ public abstract class AbstractTestNativeTpcdsQueries
 
     // TODO This test often fails in CI only. Tracked by https://github.com/prestodb/presto/issues/20271
     @Ignore
-    @Test
-    public void testTpcdsQ64()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ64(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("64"));
     }
 
-    @Test
-    public void testTpcdsQ65()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ65(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("65"));
     }
 
-    @Test
-    public void testTpcdsQ66()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ66(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("66"));
     }
 
-    @Test
-    public void testTpcdsQ67()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ67(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("67"));
     }
 
-    @Test
-    public void testTpcdsQ68()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ68(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("68"));
     }
 
-    @Test
-    public void testTpcdsQ69()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ69(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("69"));
     }
 
-    @Test
-    public void testTpcdsQ70()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ70(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("70"));
     }
 
-    @Test
-    public void testTpcdsQ71()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ71(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("71"));
     }
 
-    @Test
-    public void testTpcdsQ72()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ72(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("72"));
     }
 
-    @Test
-    public void testTpcdsQ73()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ73(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("73"));
     }
 
-    @Test
-    public void testTpcdsQ74()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ74(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("74"));
     }
 
-    @Test
-    public void testTpcdsQ75()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ75(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("75"));
     }
 
-    @Test
-    public void testTpcdsQ76()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ76(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("76"));
     }
 
-    @Test
-    public void testTpcdsQ77()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ77(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("77"));
     }
 
-    @Test
-    public void testTpcdsQ78()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ78(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("78"));
     }
 
-    @Test
-    public void testTpcdsQ79()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ79(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("79"));
     }
 
-    @Test
-    public void testTpcdsQ80()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ80(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("80"));
     }
 
-    @Test
-    public void testTpcdsQ81()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ81(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("81"));
     }
 
-    @Test
-    public void testTpcdsQ82()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ82(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("82"));
     }
 
-    @Test
-    public void testTpcdsQ83()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ83(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("83"));
     }
 
-    @Test
-    public void testTpcdsQ84()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ84(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("84"));
     }
 
-    @Test
-    public void testTpcdsQ85()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ85(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("85"));
     }
 
-    @Test
-    public void testTpcdsQ86()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ86(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("86"));
     }
 
-    @Test
-    public void testTpcdsQ87()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ87(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("87"));
     }
 
-    @Test
-    public void testTpcdsQ88()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ88(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("88"));
     }
 
-    @Test
-    public void testTpcdsQ89()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ89(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("89"));
     }
 
-    @Test
-    public void testTpcdsQ90()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ90(String propChange, Session session)
             throws Exception
     {
         assertQueryFails(session, getTpcdsQuery("90"), "[\\s\\S]*Division by zero[\\s\\S]*");
     }
 
-    @Test
-    public void testTpcdsQ91()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ91(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("91"));
     }
 
-    @Test
-    public void testTpcdsQ92()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ92(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("92"));
     }
 
-    @Test
-    public void testTpcdsQ93()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ93(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("93"));
     }
 
-    @Test
-    public void testTpcdsQ94()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ94(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("94"));
     }
 
-    @Test
-    public void testTpcdsQ95()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ95(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("95"));
     }
 
-    @Test
-    public void testTpcdsQ96()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ96(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("96"));
     }
 
-    @Test
-    public void testTpcdsQ97()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ97(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("97"));
     }
 
-    @Test
-    public void testTpcdsQ98()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ98(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("98"));
     }
 
-    @Test
-    public void testTpcdsQ99()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpcdsQ99(String propChange, Session session)
             throws Exception
     {
         assertQuery(session, getTpcdsQuery("99"));

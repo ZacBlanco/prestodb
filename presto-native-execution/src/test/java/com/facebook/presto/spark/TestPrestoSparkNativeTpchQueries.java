@@ -13,6 +13,7 @@
  */
 package com.facebook.presto.spark;
 
+import com.facebook.presto.Session;
 import com.facebook.presto.nativeworker.AbstractTestNativeTpchQueries;
 import com.facebook.presto.testing.ExpectedQueryRunner;
 import com.facebook.presto.testing.QueryRunner;
@@ -45,29 +46,29 @@ public class TestPrestoSparkNativeTpchQueries
     // Following tests require broadcast join
     @Override
     @Ignore
-    public void testTpchQ7() {}
+    public void testTpchQ7(String propChange, Session session) {}
 
     @Override
     @Ignore
-    public void testTpchQ8() {}
+    public void testTpchQ8(String propChange, Session session) {}
 
     @Override
     @Ignore
-    public void testTpchQ11() {}
+    public void testTpchQ11(String propChange, Session session) {}
 
     @Override
     @Ignore
-    public void testTpchQ15() {}
+    public void testTpchQ15(String propChange, Session session) {}
 
     @Override
     @Ignore
-    public void testTpchQ18() {}
+    public void testTpchQ18(String propChange, Session session) {}
 
     @Override
     @Ignore
-    public void testTpchQ21() {}
+    public void testTpchQ21(String propChange, Session session) {}
 
     @Override
     @Ignore
-    public void testTpchQ22() {}
+    public void testTpchQ22(String propChange, Session session) {}
 }

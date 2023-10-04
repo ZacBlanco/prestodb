@@ -13,14 +13,20 @@
  */
 package com.facebook.presto.nativeworker;
 
+import com.facebook.presto.Session;
 import com.facebook.presto.testing.QueryRunner;
 import com.facebook.presto.tests.AbstractTestQueryFramework;
 import com.google.common.io.Resources;
-import org.testng.annotations.Ignore;
+import org.testng.ITest;
+import org.testng.annotations.BeforeMethod;
+import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
 
 import java.io.IOException;
+import java.lang.reflect.Method;
 
+import static com.facebook.presto.SystemSessionProperties.QUERY_MAX_EXECUTION_TIME;
+import static com.facebook.presto.SystemSessionProperties.QUERY_MAX_RUN_TIME;
 import static com.facebook.presto.nativeworker.NativeQueryRunnerUtils.createBucketedCustomer;
 import static com.facebook.presto.nativeworker.NativeQueryRunnerUtils.createBucketedLineitemAndOrders;
 import static com.facebook.presto.nativeworker.NativeQueryRunnerUtils.createCustomer;
@@ -37,7 +43,34 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 
 public abstract class AbstractTestNativeTpchQueries
         extends AbstractTestQueryFramework
+        implements ITest
 {
+    private String testName = "";
+
+    @BeforeMethod(alwaysRun = true)
+    public void setCustomTestcaseName(Method method, Object[] testData)
+    {
+        this.testName = method.getName();
+    }
+
+    @Override
+    public String getTestName()
+    {
+        return testName;
+    }
+
+    @DataProvider(name = "sessionProvider")
+    public Object[][] sessionConfigProvider()
+    {
+        QueryRunner queryRunner = (QueryRunner) getExpectedQueryRunner();
+        return new Object[][] {
+                new Object[] {
+                        Session.builder(queryRunner.getDefaultSession())
+                                .setSchema("tpcds")
+                                .setSystemProperty(QUERY_MAX_RUN_TIME, "2m")
+                                .setSystemProperty(QUERY_MAX_EXECUTION_TIME, "2m").build()}};
+    }
+
     @Override
     protected void createTables()
     {
@@ -66,106 +99,106 @@ public abstract class AbstractTestNativeTpchQueries
 
     // This test runs the 22 TPC-H queries.
 
-    @Test
-    public void testTpchQ1()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpchQ1(String propChange, Session session)
             throws Exception
     {
-        assertQuery(getTpchQuery(1));
+        assertQuery(session, getTpchQuery(1));
     }
 
-    @Test
-    public void testTpchQ2()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpchQ2(String propChange, Session session)
             throws Exception
     {
-        assertQuery(getTpchQuery(2));
+        assertQuery(session, getTpchQuery(2));
     }
 
-    @Test
-    public void testTpchQ3()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpchQ3(String propChange, Session session)
             throws Exception
     {
-        assertQuery(getTpchQuery(3));
+        assertQuery(session, getTpchQuery(3));
     }
 
-    @Test
-    public void testTpchQ4()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpchQ4(String propChange, Session session)
             throws Exception
     {
-        assertQuery(getTpchQuery(4));
+        assertQuery(session, getTpchQuery(4));
     }
 
-    @Test
-    public void testTpchQ5()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpchQ5(String propChange, Session session)
             throws Exception
     {
-        assertQuery(getTpchQuery(5));
+        assertQuery(session, getTpchQuery(5));
     }
 
-    @Test
-    public void testTpchQ6()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpchQ6(String propChange, Session session)
             throws Exception
     {
-        assertQuery(getTpchQuery(6));
+        assertQuery(session, getTpchQuery(6));
     }
 
-    @Test
-    public void testTpchQ7()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpchQ7(String propChange, Session session)
             throws Exception
     {
-        assertQuery(getTpchQuery(7));
+        assertQuery(session, getTpchQuery(7));
     }
 
-    @Test
-    public void testTpchQ8()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpchQ8(String propChange, Session session)
             throws Exception
     {
-        assertQuery(getTpchQuery(8));
+        assertQuery(session, getTpchQuery(8));
     }
 
-    @Test
-    public void testTpchQ9()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpchQ9(String propChange, Session session)
             throws Exception
     {
-        assertQuery(getTpchQuery(9));
+        assertQuery(session, getTpchQuery(9));
     }
 
-    @Test
-    public void testTpchQ10()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpchQ10(String propChange, Session session)
             throws Exception
     {
-        assertQuery(getTpchQuery(10));
+        assertQuery(session, getTpchQuery(10));
     }
 
-    @Test
-    public void testTpchQ11()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpchQ11(String propChange, Session session)
             throws Exception
     {
-        assertQuery(getTpchQuery(11));
+        assertQuery(session, getTpchQuery(11));
     }
 
-    @Test
-    public void testTpchQ12()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpchQ12(String propChange, Session session)
             throws Exception
     {
-        assertQuery(getTpchQuery(12));
+        assertQuery(session, getTpchQuery(12));
     }
 
-    @Test
-    public void testTpchQ13()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpchQ13(String propChange, Session session)
             throws Exception
     {
-        assertQuery(getTpchQuery(13));
+        assertQuery(session, getTpchQuery(13));
     }
 
-    @Test
-    public void testTpchQ14()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpchQ14(String propChange, Session session)
             throws Exception
     {
-        assertQuery(getTpchQuery(14));
+        assertQuery(session, getTpchQuery(14));
     }
 
-    @Test
-    public void testTpchQ15()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpchQ15(String propChange, Session session)
             throws Exception
     {
         // Q15 doesn't reliably return correct results.
@@ -180,54 +213,54 @@ public abstract class AbstractTestNativeTpchQueries
         assertQuerySucceeds(getTpchQuery(15));
     }
 
-    @Test
-    public void testTpchQ16()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpchQ16(String propChange, Session session)
             throws Exception
     {
-        assertQuery(getTpchQuery(16));
+        assertQuery(session, getTpchQuery(16));
     }
 
     // TODO This test is failing in CI often. The failures cannot be reproduced locally. Re-enable when failures are fixed.
-    @Ignore
-    @Test
-    public void testTpchQ17()
+//    @Ignore
+    @Test(dataProvider = "sessionProvider")
+    public void testTpchQ17(String propChange, Session session)
             throws Exception
     {
-        assertQuery(getTpchQuery(17));
+        assertQuery(session, getTpchQuery(17));
     }
 
-    @Test
-    public void testTpchQ18()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpchQ18(String propChange, Session session)
             throws Exception
     {
-        assertQuery(getTpchQuery(18));
+        assertQuery(session, getTpchQuery(18));
     }
 
-    @Test
-    public void testTpchQ19()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpchQ19(String propChange, Session session)
             throws Exception
     {
-        assertQuery(getTpchQuery(19));
+        assertQuery(session, getTpchQuery(19));
     }
 
-    @Test
-    public void testTpchQ20()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpchQ20(String propChange, Session session)
             throws Exception
     {
-        assertQuery(getTpchQuery(20));
+        assertQuery(session, getTpchQuery(20));
     }
 
-    @Test
-    public void testTpchQ21()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpchQ21(String propChange, Session session)
             throws Exception
     {
-        assertQuery(getTpchQuery(21));
+        assertQuery(session, getTpchQuery(21));
     }
 
-    @Test
-    public void testTpchQ22()
+    @Test(dataProvider = "sessionProvider")
+    public void testTpchQ22(String propChange, Session session)
             throws Exception
     {
-        assertQuery(getTpchQuery(22));
+        assertQuery(session, getTpchQuery(22));
     }
 }
