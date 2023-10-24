@@ -7,10 +7,10 @@ local exchange (GATHER, SINGLE, [])
                         join (INNER, REPLICATED):
                             join (INNER, REPLICATED):
                                 join (INNER, PARTITIONED):
-                                    remote exchange (REPARTITION, HASH, [cd_demo_sk_0, cd_education_status_3, cd_marital_status_2])
+                                    remote exchange (REPARTITION, HASH, [cd_demo_sk, cd_education_status, cd_marital_status])
                                         scan customer_demographics
                                     local exchange (GATHER, SINGLE, [])
-                                        remote exchange (REPARTITION, HASH, [cd_education_status, cd_marital_status, wr_returning_cdemo_sk])
+                                        remote exchange (REPARTITION, HASH, [cd_education_status_3, cd_marital_status_2, wr_refunded_cdemo_sk])
                                             join (INNER, PARTITIONED):
                                                 remote exchange (REPARTITION, HASH, [wr_refunded_addr_sk])
                                                     join (INNER, PARTITIONED):

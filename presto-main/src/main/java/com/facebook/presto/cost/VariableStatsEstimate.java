@@ -13,10 +13,12 @@
  */
 package com.facebook.presto.cost;
 
+import com.facebook.presto.spi.statistics.ConnectorHistogram;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.Function;
 
 import static com.google.common.base.MoreObjects.toStringHelper;
@@ -39,6 +41,7 @@ public class VariableStatsEstimate
     private final double nullsFraction;
     private final double averageRowSize;
     private final double distinctValuesCount;
+    private final ConnectorHistogram histogram;
 
     public static VariableStatsEstimate unknown()
     {
@@ -56,7 +59,8 @@ public class VariableStatsEstimate
             @JsonProperty("highValue") double highValue,
             @JsonProperty("nullsFraction") double nullsFraction,
             @JsonProperty("averageRowSize") double averageRowSize,
-            @JsonProperty("distinctValuesCount") double distinctValuesCount)
+            @JsonProperty("distinctValuesCount") double distinctValuesCount,
+            @JsonProperty("histogram") ConnectorHistogram histogram)
     {
         checkArgument(
                 lowValue <= highValue || (isNaN(lowValue) && isNaN(highValue)),
@@ -79,6 +83,16 @@ public class VariableStatsEstimate
         checkArgument(distinctValuesCount >= 0 || isNaN(distinctValuesCount), "Distinct values count should be non-negative, got: %s", distinctValuesCount);
         // TODO normalize distinctValuesCount for an empty range (or validate it is already normalized)
         this.distinctValuesCount = distinctValuesCount;
+        this.histogram = histogram;
+    }
+
+    public VariableStatsEstimate(double lowValue,
+            double highValue,
+            double nullsFraction,
+            double averageRowSize,
+            double distinctValuesCount)
+    {
+        this(lowValue, highValue, nullsFraction, averageRowSize, distinctValuesCount, new UniformDistributionHistogram(lowValue, highValue, distinctValuesCount));
     }
 
     @JsonProperty
@@ -97,6 +111,12 @@ public class VariableStatsEstimate
     public double getNullsFraction()
     {
         return nullsFraction;
+    }
+
+    @JsonProperty
+    public ConnectorHistogram getHistogram()
+    {
+        return histogram;
     }
 
     public StatisticRange statisticRange()
@@ -153,6 +173,8 @@ public class VariableStatsEstimate
             return false;
         }
         VariableStatsEstimate that = (VariableStatsEstimate) o;
+        // histograms are explicitly left out because equals calculations would
+        // be expensive.
         return Double.compare(nullsFraction, that.nullsFraction) == 0 &&
                 Double.compare(averageRowSize, that.averageRowSize) == 0 &&
                 Double.compare(distinctValuesCount, that.distinctValuesCount) == 0 &&
@@ -174,6 +196,10 @@ public class VariableStatsEstimate
                 .add("nulls", nullsFraction)
                 .add("ndv", distinctValuesCount)
                 .add("rowSize", averageRowSize)
+                .add("histogram", format("[25: %s, 50: %s, 75: %s]",
+                        histogram.inverseCumulativeProbability(0.25),
+                        histogram.inverseCumulativeProbability(.5),
+                        histogram.inverseCumulativeProbability(.75)))
                 .toString();
     }
 
@@ -189,7 +215,8 @@ public class VariableStatsEstimate
                 .setHighValue(other.getHighValue())
                 .setNullsFraction(other.getNullsFraction())
                 .setAverageRowSize(other.getAverageRowSize())
-                .setDistinctValuesCount(other.getDistinctValuesCount());
+                .setDistinctValuesCount(other.getDistinctValuesCount())
+                .setHistogram(other.getHistogram());
     }
 
     public static final class Builder
@@ -199,6 +226,7 @@ public class VariableStatsEstimate
         private double nullsFraction = NaN;
         private double averageRowSize = NaN;
         private double distinctValuesCount = NaN;
+        private Optional<ConnectorHistogram> histogram = Optional.empty();
 
         public Builder setStatisticsRange(StatisticRange range)
         {
@@ -237,9 +265,16 @@ public class VariableStatsEstimate
             return this;
         }
 
+        public Builder setHistogram(ConnectorHistogram histogram)
+        {
+            this.histogram = Optional.of(histogram);
+            return this;
+        }
+
         public VariableStatsEstimate build()
         {
-            return new VariableStatsEstimate(lowValue, highValue, nullsFraction, averageRowSize, distinctValuesCount);
+            return new VariableStatsEstimate(lowValue, highValue, nullsFraction, averageRowSize, distinctValuesCount,
+                    histogram.orElseGet(() -> new UniformDistributionHistogram(lowValue, highValue, distinctValuesCount)));
         }
     }
 }

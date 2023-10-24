@@ -246,12 +246,14 @@ public class JoinStatsRule
                 .setNullsFraction(0)
                 .setStatisticsRange(intersect)
                 .setDistinctValuesCount(retainedNdv)
+                .setHistogram(new DomainConstrainedHistogram(intersect, leftStats.getHistogram()))
                 .build();
 
         VariableStatsEstimate newRightStats = buildFrom(rightStats)
                 .setNullsFraction(0)
                 .setStatisticsRange(intersect)
                 .setDistinctValuesCount(retainedNdv)
+                .setHistogram(new DomainConstrainedHistogram(intersect, rightStats.getHistogram()))
                 .build();
 
         PlanNodeStatsEstimate.Builder result = PlanNodeStatsEstimate.buildFrom(stats)

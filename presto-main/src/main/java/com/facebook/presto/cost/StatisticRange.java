@@ -13,6 +13,9 @@
  */
 package com.facebook.presto.cost;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.util.Objects;
 
 import static com.google.common.base.MoreObjects.toStringHelper;
@@ -28,8 +31,8 @@ import static java.util.Objects.requireNonNull;
 
 public class StatisticRange
 {
-    private static final double INFINITE_TO_FINITE_RANGE_INTERSECT_OVERLAP_HEURISTIC_FACTOR = 0.25;
-    private static final double INFINITE_TO_INFINITE_RANGE_INTERSECT_OVERLAP_HEURISTIC_FACTOR = 0.5;
+    protected static final double INFINITE_TO_FINITE_RANGE_INTERSECT_OVERLAP_HEURISTIC_FACTOR = 0.25;
+    protected static final double INFINITE_TO_INFINITE_RANGE_INTERSECT_OVERLAP_HEURISTIC_FACTOR = 0.5;
 
     // TODO unify field and method names with SymbolStatsEstimate
     /**
@@ -43,7 +46,10 @@ public class StatisticRange
 
     private final double distinctValues;
 
-    public StatisticRange(double low, double high, double distinctValues)
+    @JsonCreator
+    public StatisticRange(@JsonProperty("low") double low,
+            @JsonProperty("high") double high,
+            @JsonProperty("distinctValuesCount") double distinctValues)
     {
         checkArgument(
                 low <= high || (isNaN(low) && isNaN(high)),
@@ -67,16 +73,19 @@ public class StatisticRange
         return new StatisticRange(estimate.getLowValue(), estimate.getHighValue(), estimate.getDistinctValuesCount());
     }
 
+    @JsonProperty
     public double getLow()
     {
         return low;
     }
 
+    @JsonProperty
     public double getHigh()
     {
         return high;
     }
 
+    @JsonProperty
     public double getDistinctValuesCount()
     {
         return distinctValues;

@@ -125,6 +125,9 @@ public class StatsNormalizer
         return VariableStatsEstimate.buildFrom(variableStats)
                 .setDistinctValuesCount(distinctValuesCount)
                 .setNullsFraction(nullsFraction)
+                .setHistogram(new DomainConstrainedHistogram(
+                        new StatisticRange(variableStats.getLowValue(), variableStats.getHighValue(), distinctValuesCount),
+                        variableStats.getHistogram()))
                 .build();
     }
 

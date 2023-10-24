@@ -13,7 +13,9 @@
  */
 package com.facebook.presto.cost;
 
+import com.facebook.airlift.log.Logger;
 import com.facebook.presto.spi.relation.VariableReferenceExpression;
+import com.facebook.presto.spi.statistics.Estimate;
 import com.facebook.presto.sql.tree.ComparisonExpression;
 
 import java.util.Optional;
@@ -31,6 +33,8 @@ import static java.lang.Double.isNaN;
 
 public final class ComparisonStatsCalculator
 {
+    private static final Logger log = Logger.get(ComparisonStatsCalculator.class);
+
     private ComparisonStatsCalculator() {}
 
     public static PlanNodeStatsEstimate estimateExpressionToLiteralComparison(
@@ -132,8 +136,25 @@ public final class ComparisonStatsCalculator
     {
         StatisticRange expressionRange = StatisticRange.from(expressionStatistics);
         StatisticRange intersectRange = expressionRange.intersect(filterRange);
-
-        double filterFactor = expressionRange.overlapPercentWith(intersectRange);
+        double expressionFilter = expressionRange.overlapPercentWith(intersectRange);
+        Estimate histogramFilterIntersect = HistogramCalculator.calculateFilterFactor(intersectRange, expressionStatistics.getHistogram());
+        if (!Double.isNaN(expressionFilter) &&
+                !histogramFilterIntersect.fuzzyEquals(Estimate.of(expressionFilter), .0001)) {
+            log.warn(String.format("wee woo wee woo histogram filter factor is wrong%n" +
+                    "expression range: %s%n" +
+                    "intersect range: %s%n" +
+                    "overlapPercent: %s%n" +
+                    "histogram: %s%n" +
+                    "histogramFilterIntersect: %s%n", expressionRange, intersectRange, expressionFilter, expressionStatistics.getHistogram(), histogramFilterIntersect));
+            StatisticRange.from(expressionStatistics);
+            expressionRange.intersect(filterRange);
+            expressionRange.overlapPercentWith(intersectRange);
+            histogramFilterIntersect = HistogramCalculator.calculateFilterFactor(intersectRange, expressionStatistics.getHistogram());
+        }
+        double filterFactor = Optional.of(histogramFilterIntersect)
+                .filter(est -> !est.isUnknown())
+                .map(Estimate::getValue)
+                .orElseGet(() -> expressionRange.overlapPercentWith(intersectRange));
 
         PlanNodeStatsEstimate estimate = inputStatistics.mapOutputRowCount(rowCount -> filterFactor * (1 - expressionStatistics.getNullsFraction()) * rowCount);
         if (expressionVariable.isPresent()) {
@@ -142,6 +163,7 @@ public final class ComparisonStatsCalculator
                             .setAverageRowSize(expressionStatistics.getAverageRowSize())
                             .setStatisticsRange(intersectRange)
                             .setNullsFraction(0.0)
+                            .setHistogram(new DomainConstrainedHistogram(intersectRange, expressionStatistics.getHistogram()))
                             .build();
             estimate = estimate.mapVariableColumnStatistics(expressionVariable.get(), oldStats -> symbolNewEstimate);
         }
