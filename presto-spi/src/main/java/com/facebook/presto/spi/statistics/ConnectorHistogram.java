@@ -61,9 +61,4 @@ public interface ConnectorHistogram
      * @return the number of distinct values falling less than the percentile
      */
     Estimate cumulativeDistinctValues(double percentile);
-
-    /**
-     * @return the total number of distinct values in the distribution.
-     */
-    Estimate distinctValues();
 }

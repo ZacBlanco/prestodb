@@ -103,6 +103,15 @@ public class DomainConstrainedHistogram
     public Estimate cumulativeDistinctValues(double percentile)
     {
         verify(percentile >= 0.0 && percentile <= 1.0, "percentile must be in [0.0, 1.0]");
+        if (percentile == 1.0) {
+            Estimate highDistinct = source.cumulativeProbability(range.getHigh())
+                    .flatMap(source::cumulativeDistinctValues);
+            Estimate lowDistinct = source.cumulativeProbability(range.getLow())
+                    .flatMap(source::cumulativeDistinctValues);
+            return highDistinct.flatMap(high -> lowDistinct.map(low -> high - low))
+                    .map(value -> min(range.getDistinctValuesCount(), max(1.0, value)))
+                    .or(() -> Estimate.of(range.getDistinctValuesCount()));
+        }
         // distinct values of percentile - distinct values at low
         return modifier.flatMap(mod ->
                 source.cumulativeProbability(range.getLow()).flatMap(lowPercent -> {
@@ -110,18 +119,6 @@ public class DomainConstrainedHistogram
                     Estimate distinctValueSource = source.cumulativeDistinctValues(lowPercent + (percentile * mod));
                     return lowDistinctValue.flatMap(lowDistinct -> distinctValueSource.map(distinctValues -> distinctValues - lowDistinct));
                 }));
-    }
-
-    @Override
-    public Estimate distinctValues()
-    {
-        Estimate highDistinct = source.cumulativeProbability(range.getHigh())
-                .flatMap(source::cumulativeDistinctValues);
-        Estimate lowDistinct = source.cumulativeProbability(range.getLow())
-                .flatMap(source::cumulativeDistinctValues);
-        return highDistinct.flatMap(high -> lowDistinct.map(low -> high - low))
-                .map(value -> min(range.getDistinctValuesCount(), max(1.0, value)))
-                .or(() -> Estimate.of(range.getDistinctValuesCount()));
     }
 
     @JsonProperty

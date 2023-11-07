@@ -114,7 +114,6 @@ public class TestUniformHistogram
         assertEquals(hist.cumulativeProbability(1.0).getValue(), 1.0);
         assertEquals(hist.cumulativeProbability(1.5).getValue(), 1.0);
 
-        assertEquals(hist.distinctValues().getValue(), 1.0);
         assertEquals(hist.cumulativeDistinctValues(0.0).getValue(), 0.0);
         assertEquals(hist.cumulativeDistinctValues(0.5).getValue(), 0.0);
         assertEquals(hist.cumulativeDistinctValues(1.0).getValue(), 1.0);

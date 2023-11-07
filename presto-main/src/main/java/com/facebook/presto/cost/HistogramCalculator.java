@@ -56,7 +56,7 @@ public class HistogramCalculator
         // one of the max/min bounds can't be determined
         if ((max.isUnknown() && !min.isUnknown()) || (!max.isUnknown() && min.isUnknown())) {
             if (range.length() == 0.0) {
-                return histogram.distinctValues().map(distinct -> 1.0 / distinct);
+                return histogram.cumulativeDistinctValues(1.0).map(distinct -> 1.0 / distinct);
             }
             if (isFinite(range.length())) {
                 return Estimate.of(StatisticRange.INFINITE_TO_FINITE_RANGE_INTERSECT_OVERLAP_HEURISTIC_FACTOR);
@@ -70,7 +70,7 @@ public class HistogramCalculator
         // both bounds are probably infinity, use the infinite-infinite heuristic
         if (lowPercentile.isUnknown() || highPercentile.isUnknown()) {
             // in the case the histogram has no values
-            if (histogram.distinctValues().equals(Estimate.zero()) || range.getDistinctValuesCount() == 0.0) {
+            if (histogram.cumulativeDistinctValues(1.0).equals(Estimate.zero()) || range.getDistinctValuesCount() == 0.0) {
                 return Estimate.of(0.0);
             }
 
@@ -82,11 +82,11 @@ public class HistogramCalculator
             }
 
             if (range.length() == 0.0) {
-                return histogram.distinctValues().map(distinct -> 1.0 / distinct);
+                return histogram.cumulativeDistinctValues(1.0).map(distinct -> 1.0 / distinct);
             }
 
             if (!isNaN(range.getDistinctValuesCount())) {
-                return histogram.distinctValues().map(distinct -> min(1.0, range.getDistinctValuesCount() / distinct));
+                return histogram.cumulativeDistinctValues(1.0).map(distinct -> min(1.0, range.getDistinctValuesCount() / distinct));
             }
 
             return Estimate.of(StatisticRange.INFINITE_TO_INFINITE_RANGE_INTERSECT_OVERLAP_HEURISTIC_FACTOR);
@@ -101,17 +101,17 @@ public class HistogramCalculator
             // If one of the bounds is unknown, but both percentiles are equal,
             // it's likely that a heuristic value was returned
             if (max.isUnknown() || min.isUnknown()) {
-                return histogram.distinctValues().flatMap(distinct -> lowPercentile.map(lowPercent -> distinct * lowPercent));
+                return histogram.cumulativeDistinctValues(1.0).flatMap(distinct -> lowPercentile.map(lowPercent -> distinct * lowPercent));
             }
 
-            return histogram.distinctValues().map(distinct -> 1.0 / distinct);
+            return histogram.cumulativeDistinctValues(1.0).map(distinct -> 1.0 / distinct);
         }
 
         // in the case that we return the entire range, the returned factor percent should be
         // proportional to the number of distinct values in the range
         if (lowPercentile.equals(Estimate.zero()) && highPercentile.equals(Estimate.of(1.0)) && min.isUnknown() && max.isUnknown()) {
-            return histogram.distinctValues().map(totalDistinct -> min(1.0, range.getDistinctValuesCount() / totalDistinct))
-                    // in the case distinctValues() is NaN
+            return histogram.cumulativeDistinctValues(1.0).map(totalDistinct -> min(1.0, range.getDistinctValuesCount() / totalDistinct))
+                    // in the case cumulativeDistinctValues(1.0) is NaN
                     .or(() -> Estimate.of(StatisticRange.INFINITE_TO_INFINITE_RANGE_INTERSECT_OVERLAP_HEURISTIC_FACTOR));
         }
 

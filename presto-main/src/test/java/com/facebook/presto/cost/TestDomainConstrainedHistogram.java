@@ -51,6 +51,6 @@ public class TestDomainConstrainedHistogram
     {
         ConnectorHistogram source = new UniformDistributionHistogram(NEGATIVE_INFINITY, POSITIVE_INFINITY, 7.0);
         DomainConstrainedHistogram hist = new DomainConstrainedHistogram(new StatisticRange(NEGATIVE_INFINITY, POSITIVE_INFINITY, 5.0), source);
-        assertEquals(hist.distinctValues().getValue(), 5.0);
+        assertEquals(hist.cumulativeDistinctValues(1.0).getValue(), 5.0);
     }
 }

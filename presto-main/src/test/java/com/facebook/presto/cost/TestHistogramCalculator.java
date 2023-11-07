@@ -34,38 +34,37 @@ public class TestHistogramCalculator
         StatisticRange empty = StatisticRange.empty();
 
         // Equal ranges
-        assertFilterFactor(zeroToTen, uniformHist(0, 10, 5), Estimate.of(1.0));
-        assertFilterFactor(zeroToTen, uniformHist(0, 10, 20), Estimate.of(1.0));
+        assertFilterFactor(Estimate.of(1.0), zeroToTen, uniformHist(0, 10, 5));
+        assertFilterFactor(Estimate.of(1.0), zeroToTen, uniformHist(0, 10, 20));
 
         // Some overlap
-        assertFilterFactor(range(5, 3000, 5), uniformHist(zeroToTen), Estimate.of(0.5));
+        assertFilterFactor(Estimate.of(0.5), range(5, 3000, 5), uniformHist(zeroToTen));
 
         // Single value overlap
-        assertFilterFactor(range(3, 3, 1), uniformHist(zeroToTen), Estimate.of(1.0 / zeroToTen.getDistinctValuesCount()));
-        assertFilterFactor(range(10, 100, 357), uniformHist(zeroToTen), Estimate.of(1.0 / zeroToTen.getDistinctValuesCount()));
+        assertFilterFactor(Estimate.of(1.0 / zeroToTen.getDistinctValuesCount()), range(3, 3, 1), uniformHist(zeroToTen));
+        assertFilterFactor(Estimate.of(1.0 / zeroToTen.getDistinctValuesCount()), range(10, 100, 357), uniformHist(zeroToTen));
 
         // No overlap
-        assertFilterFactor(range(20, 30, 10), uniformHist(zeroToTen), Estimate.zero());
+        assertFilterFactor(Estimate.zero(), range(20, 30, 10), uniformHist(zeroToTen));
 
         // Empty ranges
-        assertFilterFactor(zeroToTen, uniformHist(empty), Estimate.zero());
-        assertFilterFactor(empty, uniformHist(zeroToTen), Estimate.zero());
+        assertFilterFactor(Estimate.zero(), zeroToTen, uniformHist(empty));
+        assertFilterFactor(Estimate.zero(), empty, uniformHist(zeroToTen));
 
         // no test for (empty, empty) since any return value is correct
-        assertFilterFactor(unboundedRange(10), uniformHist(empty), Estimate.zero());
-        assertFilterFactor(empty, uniformHist(unboundedRange(10)), Estimate.zero());
+        assertFilterFactor(Estimate.zero(), unboundedRange(10), uniformHist(empty));
+        assertFilterFactor(Estimate.zero(), empty, uniformHist(unboundedRange(10)));
 
         // Unbounded (infinite), NDV-based
-        assertFilterFactor(unboundedRange(10), uniformHist(unboundedRange(20)), Estimate.of(0.5));
-        assertFilterFactor(unboundedRange(20), uniformHist(unboundedRange(10)), Estimate.of(1.0));
+        assertFilterFactor(Estimate.of(0.5), unboundedRange(10), uniformHist(unboundedRange(20)));
+        assertFilterFactor(Estimate.of(1.0), unboundedRange(20), uniformHist(unboundedRange(10)));
 
         // NEW TESTS (TPC-H Q2)
         // unbounded ranges
-        assertFilterFactor(unboundedRange(0.5), uniformHist(unboundedRange(NaN)), Estimate.of(.5));
+        assertFilterFactor(Estimate.of(.5), unboundedRange(0.5), uniformHist(unboundedRange(NaN)));
         // unbounded ranges with limited distinct values
-        assertFilterFactor(unboundedRange(1.0),
-                domainConstrained(unboundedRange(5.0), uniformHist(unboundedRange(7.0))),
-                Estimate.of(0.2));
+        assertFilterFactor(Estimate.of(0.2), unboundedRange(1.0),
+                domainConstrained(unboundedRange(5.0), uniformHist(unboundedRange(7.0))));
     }
 
     @Test
@@ -130,7 +129,7 @@ public class TestHistogramCalculator
         return new StatisticRange(NEGATIVE_INFINITY, POSITIVE_INFINITY, distinctValues);
     }
 
-    private static void assertFilterFactor(StatisticRange range, ConnectorHistogram histogram, Estimate expected)
+    private static void assertFilterFactor(Estimate expected, StatisticRange range, ConnectorHistogram histogram)
     {
         assertEquals(calculateFilterFactor(range, histogram), expected);
     }

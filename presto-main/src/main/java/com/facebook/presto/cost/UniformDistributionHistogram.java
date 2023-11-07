@@ -128,18 +128,16 @@ public class UniformDistributionHistogram
     public Estimate cumulativeDistinctValues(double percentile)
     {
         verify(percentile >= 0.0 && percentile <= 1.0, "percentile must be in [0.0, 1.0]");
-        Estimate distinctEstimate = distinctValues();
         // case when distribution is a single value
         if (lowValue == highValue && percentile < 1.0) {
             return Estimate.zero();
         }
-        return distinctEstimate.map(values -> percentile * values);
-    }
+        if (percentile == 1.0) {
+            return distinctValuesCount;
+        }
+        Estimate distinctEstimate = cumulativeDistinctValues(1.0);
 
-    @Override
-    public Estimate distinctValues()
-    {
-        return distinctValuesCount;
+        return distinctEstimate.map(values -> percentile * values);
     }
 
     @Override
