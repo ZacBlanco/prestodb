@@ -64,8 +64,8 @@ public class HistogramCalculator
             return Estimate.of(StatisticRange.INFINITE_TO_INFINITE_RANGE_INTERSECT_OVERLAP_HEURISTIC_FACTOR);
         }
 
-        Estimate lowPercentile = histogram.cumulativeProbability(range.getLow());
-        Estimate highPercentile = histogram.cumulativeProbability(range.getHigh());
+        Estimate lowPercentile = histogram.cumulativeProbability(range.getLow(), true);
+        Estimate highPercentile = histogram.cumulativeProbability(range.getHigh(), true);
 
         // both bounds are probably infinity, use the infinite-infinite heuristic
         if (lowPercentile.isUnknown() || highPercentile.isUnknown()) {

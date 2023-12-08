@@ -25,7 +25,7 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
  * domains map to real values.
  *
  */
-@JsonTypeInfo(use = JsonTypeInfo.Id.MINIMAL_CLASS, include = JsonTypeInfo.As.PROPERTY, property = "@class")
+@JsonTypeInfo(use = JsonTypeInfo.Id.MINIMAL_CLASS, property = "@class")
 public interface ConnectorHistogram
 {
     /**
@@ -38,7 +38,7 @@ public interface ConnectorHistogram
      * @param value the value to calculate percentile
      * @return an Estimate of the percentile
      */
-    Estimate cumulativeProbability(double value);
+    Estimate cumulativeProbability(double value, boolean inclusive);
 
     /**
      * Calculates the value which occurs at a particular percentile in the given
@@ -54,7 +54,7 @@ public interface ConnectorHistogram
 
     /**
      * Returns the total number of distinct values in the distribution which
-     * occur in the distribution at the value corresponding to the given
+     * occur in the distribution up to the value corresponding to the given
      * percentile.
      *
      * @param percentile the percentile to query

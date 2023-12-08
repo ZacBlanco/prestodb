@@ -45,7 +45,7 @@ public class DomainConstrainedHistogram
     }
 
     @Override
-    public Estimate cumulativeProbability(double value)
+    public Estimate cumulativeProbability(double value, boolean inclusive)
     {
         if (isNaN(value)) {
             return Estimate.unknown();
@@ -61,8 +61,8 @@ public class DomainConstrainedHistogram
         }
         else {
             return modifier.flatMap(mod ->
-                            source.cumulativeProbability(value)
-                                    .flatMap(est -> source.cumulativeProbability(range.getLow())
+                            source.cumulativeProbability(value, inclusive)
+                                    .flatMap(est -> source.cumulativeProbability(range.getLow(), true)
                                             .map(lowPercent -> est - lowPercent))
                                     .map(percent -> min(1.0, max(0.0, percent / mod))))
                     .or(() -> {
@@ -86,7 +86,7 @@ public class DomainConstrainedHistogram
             return Estimate.of(range.getHigh());
         }
 
-        return modifier.flatMap(mod -> source.cumulativeProbability(range.getLow())
+        return modifier.flatMap(mod -> source.cumulativeProbability(range.getLow(), true)
                         .flatMap(lowPercentile ->
                                 source.inverseCumulativeProbability(min(1.0, max(0.0, lowPercentile + (percentile * mod))))))
                 .or(() -> {
@@ -104,9 +104,9 @@ public class DomainConstrainedHistogram
     {
         verify(percentile >= 0.0 && percentile <= 1.0, "percentile must be in [0.0, 1.0]");
         if (percentile == 1.0) {
-            Estimate highDistinct = source.cumulativeProbability(range.getHigh())
+            Estimate highDistinct = source.cumulativeProbability(range.getHigh(), true)
                     .flatMap(source::cumulativeDistinctValues);
-            Estimate lowDistinct = source.cumulativeProbability(range.getLow())
+            Estimate lowDistinct = source.cumulativeProbability(range.getLow(), true)
                     .flatMap(source::cumulativeDistinctValues);
             return highDistinct.flatMap(high -> lowDistinct.map(low -> high - low))
                     .map(value -> min(range.getDistinctValuesCount(), max(1.0, value)))
@@ -114,7 +114,7 @@ public class DomainConstrainedHistogram
         }
         // distinct values of percentile - distinct values at low
         return modifier.flatMap(mod ->
-                source.cumulativeProbability(range.getLow()).flatMap(lowPercent -> {
+                source.cumulativeProbability(range.getLow(), true).flatMap(lowPercent -> {
                     Estimate lowDistinctValue = source.cumulativeDistinctValues(lowPercent);
                     Estimate distinctValueSource = source.cumulativeDistinctValues(lowPercent + (percentile * mod));
                     return lowDistinctValue.flatMap(lowDistinct -> distinctValueSource.map(distinctValues -> distinctValues - lowDistinct));

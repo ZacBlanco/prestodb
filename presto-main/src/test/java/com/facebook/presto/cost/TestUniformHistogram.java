@@ -77,10 +77,10 @@ public class TestUniformHistogram
         assertEquals(hist.inverseCumulativeProbability(0.0), Estimate.unknown());
         assertEquals(hist.inverseCumulativeProbability(1.0).getValue(), 2.0);
 
-        assertEquals(hist.cumulativeProbability(0.0), Estimate.unknown());
-        assertEquals(hist.cumulativeProbability(1.0), Estimate.unknown());
-        assertEquals(hist.cumulativeProbability(2.0).getValue(), 1.0);
-        assertEquals(hist.cumulativeProbability(2.5).getValue(), 1.0);
+        assertEquals(hist.cumulativeProbability(0.0, true), Estimate.unknown());
+        assertEquals(hist.cumulativeProbability(1.0, true), Estimate.unknown());
+        assertEquals(hist.cumulativeProbability(2.0, true).getValue(), 1.0);
+        assertEquals(hist.cumulativeProbability(2.5, true).getValue(), 1.0);
 
         assertEquals(hist.cumulativeDistinctValues(0.5).getValue(), 1.0);
 
@@ -91,9 +91,9 @@ public class TestUniformHistogram
         assertEquals(hist.inverseCumulativeProbability(0.0).getValue(), 1.0);
         assertEquals(hist.inverseCumulativeProbability(1.0), Estimate.unknown());
 
-        assertEquals(hist.cumulativeProbability(0.0).getValue(), 0.0);
-        assertEquals(hist.cumulativeProbability(1.0).getValue(), 0.0);
-        assertEquals(hist.cumulativeProbability(1.5), Estimate.unknown());
+        assertEquals(hist.cumulativeProbability(0.0, true).getValue(), 0.0);
+        assertEquals(hist.cumulativeProbability(1.0, true).getValue(), 0.0);
+        assertEquals(hist.cumulativeProbability(1.5, true), Estimate.unknown());
 
         assertEquals(hist.cumulativeDistinctValues(0.5).getValue(), 1.0);
         assertEquals(hist.cumulativeDistinctValues(0.0).getValue(), 0.0);
@@ -109,10 +109,10 @@ public class TestUniformHistogram
         assertEquals(hist.inverseCumulativeProbability(1.0).getValue(), 1.0);
         assertEquals(hist.inverseCumulativeProbability(0.5).getValue(), 1.0);
 
-        assertEquals(hist.cumulativeProbability(0.0).getValue(), 0.0);
-        assertEquals(hist.cumulativeProbability(0.5).getValue(), 0.0);
-        assertEquals(hist.cumulativeProbability(1.0).getValue(), 1.0);
-        assertEquals(hist.cumulativeProbability(1.5).getValue(), 1.0);
+        assertEquals(hist.cumulativeProbability(0.0, true).getValue(), 0.0);
+        assertEquals(hist.cumulativeProbability(0.5, true).getValue(), 0.0);
+        assertEquals(hist.cumulativeProbability(1.0, true).getValue(), 1.0);
+        assertEquals(hist.cumulativeProbability(1.5, true).getValue(), 1.0);
 
         assertEquals(hist.cumulativeDistinctValues(0.0).getValue(), 0.0);
         assertEquals(hist.cumulativeDistinctValues(0.5).getValue(), 0.0);

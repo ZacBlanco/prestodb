@@ -51,17 +51,17 @@ public abstract class TestHistogram
         ConnectorHistogram hist = createHistogram(100);
         RealDistribution dist = getDistribution();
 
-        assertTrue(hist.cumulativeProbability(Double.NaN).isUnknown());
-        assertEquals(hist.cumulativeProbability(NEGATIVE_INFINITY).getValue(), 0.0, .001);
-        assertEquals(hist.cumulativeProbability(POSITIVE_INFINITY).getValue(), 1.0, .001);
+        assertTrue(hist.cumulativeProbability(Double.NaN, true).isUnknown());
+        assertEquals(hist.cumulativeProbability(NEGATIVE_INFINITY, true).getValue(), 0.0, .001);
+        assertEquals(hist.cumulativeProbability(POSITIVE_INFINITY, true).getValue(), 1.0, .001);
 
-        assertEquals(hist.cumulativeProbability(dist.getSupportLowerBound() - 1).getValue(), 0.0, .001);
-        assertEquals(hist.cumulativeProbability(dist.getSupportLowerBound()).getValue(), 0.0, .001);
-        assertEquals(hist.cumulativeProbability(dist.getSupportUpperBound() + 1).getValue(), 1.0, .001);
-        assertEquals(hist.cumulativeProbability(dist.getSupportUpperBound()).getValue(), 1.0, .001);
-        assertEquals(hist.cumulativeProbability(dist.getNumericalMean()).getValue(), 0.5, .001);
+        assertEquals(hist.cumulativeProbability(dist.getSupportLowerBound() - 1, true).getValue(), 0.0, .001);
+        assertEquals(hist.cumulativeProbability(dist.getSupportLowerBound(), true).getValue(), 0.0, .001);
+        assertEquals(hist.cumulativeProbability(dist.getSupportUpperBound() + 1, true).getValue(), 1.0, .001);
+        assertEquals(hist.cumulativeProbability(dist.getSupportUpperBound(), true).getValue(), 1.0, .001);
+        assertEquals(hist.cumulativeProbability(dist.getNumericalMean(), true).getValue(), 0.5, .001);
         for (int i = 0; i < 10; i++) {
-            assertEquals(hist.cumulativeProbability(dist.inverseCumulativeProbability(0.1 * i)).getValue(), dist.cumulativeProbability(0.1 * i), .001);
+            assertEquals(hist.cumulativeProbability(dist.inverseCumulativeProbability(0.1 * i), true).getValue(), dist.cumulativeProbability(0.1 * i), .001);
         }
     }
 }

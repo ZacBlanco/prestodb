@@ -77,7 +77,7 @@ public class UniformDistributionHistogram
     }
 
     @Override
-    public Estimate cumulativeProbability(double value)
+    public Estimate cumulativeProbability(double value, boolean inclusive)
     {
         if (isNaN(lowValue) ||
                 isNaN(highValue) ||
