@@ -52,10 +52,10 @@ public final class StatisticsUtil
             ColumnStatistics.Builder mergedStats = ColumnStatistics.builder()
                     .setDataSize(icebergColumnStats.getDataSize())
                     .setDistinctValuesCount(icebergColumnStats.getDistinctValuesCount())
-                    .setRange(icebergColumnStats.getRange())
                     .setNullsFraction(icebergColumnStats.getNullsFraction())
                     .setDistinctValuesCount(icebergColumnStats.getDistinctValuesCount())
-                    .setRange(icebergColumnStats.getRange());
+                    .setRange(icebergColumnStats.getRange())
+                    .setHistogram(icebergColumnStats.getHistogram());
             if (hiveColumnStats != null) {
                 if (mergeStrategy.equals(USE_NDV) || mergeStrategy.equals(USE_NULLS_FRACTION_AND_NDV)) {
                     hiveColumnStats.getDistinctValuesCount().ifPresent(ndvs -> mergedStats.setDistinctValuesCount(Estimate.of(ndvs)));

@@ -29,6 +29,7 @@ import java.util.Map;
 import java.util.OptionalInt;
 
 import static com.facebook.airlift.log.Level.WARN;
+import static com.facebook.presto.iceberg.CatalogType.HADOOP;
 import static com.facebook.presto.iceberg.CatalogType.HIVE;
 import static com.facebook.presto.spi.StandardErrorCode.NOT_SUPPORTED;
 import static com.facebook.presto.testing.TestingSession.testSessionBuilder;
@@ -116,6 +117,8 @@ public final class IcebergQueryRunner
 
         queryRunner.installPlugin(new TpchPlugin());
         queryRunner.createCatalog("tpch", "tpch");
+//        queryRunner.installPlugin(new TpcdsPlugin());
+//        queryRunner.createCatalog("tpcds", "tpcds");
 
         Path dataDirectory = queryRunner.getCoordinator().getDataDirectory();
 
@@ -167,7 +170,7 @@ public final class IcebergQueryRunner
         Map<String, String> properties = ImmutableMap.of("http-server.http.port", "8080");
         DistributedQueryRunner queryRunner = null;
         try {
-            queryRunner = createIcebergQueryRunner(properties);
+            queryRunner = createIcebergQueryRunner(properties, ImmutableMap.of("iceberg.catalog.type", HADOOP.name()));
         }
         catch (Throwable t) {
             log.error(t);
