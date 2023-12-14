@@ -16,6 +16,7 @@ package com.facebook.presto.cost;
 
 import com.facebook.presto.spi.statistics.ConnectorHistogram;
 import com.facebook.presto.spi.statistics.Estimate;
+import com.google.common.math.DoubleMath;
 
 import java.util.Optional;
 
@@ -39,7 +40,6 @@ public class HistogramCalculator
      *
      * @param range the intersecting range with the histogram
      * @param histogram the source histogram
-     *
      * @return an estimate, x,  where 0.0 <= x <= 1.0.
      */
     public static Estimate calculateFilterFactor(StatisticRange range, ConnectorHistogram histogram, Estimate totalDistinctValues)
@@ -122,9 +122,17 @@ public class HistogramCalculator
         // in the case that we return the entire range, the returned factor percent should be
         // proportional to the number of distinct values in the range
         if (lowPercentile.equals(Estimate.zero()) && highPercentile.equals(Estimate.of(1.0)) && min.isUnknown() && max.isUnknown()) {
-            return totalDistinctValues.map(totalDistinct -> min(1.0, range.getDistinctValuesCount() / totalDistinct))
-                    // in the case cumulativeDistinctValues(1.0) is NaN
-                    .or(() -> Estimate.of(StatisticRange.INFINITE_TO_INFINITE_RANGE_INTERSECT_OVERLAP_HEURISTIC_FACTOR));
+            if (totalDistinctValues.equals(Estimate.zero())) {
+                return Estimate.of(1.0);
+            }
+            return totalDistinctValues.flatMap(totalDistinct -> {
+                if (DoubleMath.fuzzyEquals(totalDistinct, 0.0, 1E-6)) {
+                    return Estimate.unknown();
+                }
+                return Estimate.of(min(1.0, range.getDistinctValuesCount() / totalDistinct));
+            })
+                // in the case totalDistinct is NaN or 0
+                .or(() -> Estimate.of(StatisticRange.INFINITE_TO_INFINITE_RANGE_INTERSECT_OVERLAP_HEURISTIC_FACTOR));
         }
 
         return Optional.of(lowPercentile)
