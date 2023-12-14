@@ -264,6 +264,7 @@ public class PlanNodeStatsEstimateMath
                 .setStatisticsRange(sum)
                 .setAverageRowSize(newAverageRowSize)
                 .setNullsFraction(newNullsFraction)
+                // TODO: propagate a union of histograms here.
                 .build();
     }
 }

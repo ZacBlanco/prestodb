@@ -132,6 +132,20 @@ public final class Estimate
         return this;
     }
 
+    /**
+     * If the estimate is unknown, run another function to generate an estimate
+     *
+     * @param supplier function to supply a new estimate
+     * @return a new estimate
+     */
+    public double orElse(Supplier<Double> supplier)
+    {
+        if (isUnknown()) {
+            return supplier.get();
+        }
+        return this.getValue();
+    }
+
     public boolean fuzzyEquals(Estimate other, double tolerance)
     {
         if (equals(other)) {

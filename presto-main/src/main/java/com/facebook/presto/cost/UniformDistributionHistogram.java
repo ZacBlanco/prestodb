@@ -19,43 +19,28 @@ import com.facebook.presto.spi.statistics.Estimate;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
-import java.util.Optional;
-
 import static com.google.common.base.MoreObjects.toStringHelper;
 import static com.google.common.base.Verify.verify;
 import static java.lang.Double.isInfinite;
 import static java.lang.Double.isNaN;
+import static java.lang.Math.max;
+import static java.lang.Math.min;
 
 public class UniformDistributionHistogram
         implements ConnectorHistogram
 {
     private final double lowValue;
     private final double highValue;
-    private final Estimate distinctValuesCount;
 
     @JsonCreator
     public UniformDistributionHistogram(
             @JsonProperty("lowValue") double lowValue,
-            @JsonProperty("highValue") double highValue,
-            @JsonProperty("distinctValuesCount") Estimate distinctValuesCount)
+            @JsonProperty("highValue") double highValue)
     {
         verify(isNaN(lowValue) || isNaN(highValue) || (lowValue <= highValue), "lowValue must be <= highValue");
-        if (lowValue == highValue) {
-            distinctValuesCount = Estimate.of(1.0);
-        }
         this.lowValue = lowValue;
         this.highValue = highValue;
-        this.distinctValuesCount = distinctValuesCount;
         // force equal range bounds to equal 1.0
-    }
-
-    public UniformDistributionHistogram(double lowValue, double highValue, double distinctValuesCount)
-    {
-        this(lowValue, highValue, Optional.of(distinctValuesCount)
-                .filter(x -> !x.isNaN())
-                .filter(x -> !x.isInfinite())
-                .map(Estimate::of)
-                .orElseGet(Estimate::unknown));
     }
 
     @JsonProperty
@@ -68,12 +53,6 @@ public class UniformDistributionHistogram
     public double getHighValue()
     {
         return highValue;
-    }
-
-    @JsonProperty
-    public Estimate getDistinctValuesCount()
-    {
-        return distinctValuesCount;
     }
 
     @Override
@@ -90,6 +69,7 @@ public class UniformDistributionHistogram
         }
 
         if (value <= lowValue) {
+            // no adjustment factor here as if the value is <= min the result is already 0.
             return Estimate.of(0.0);
         }
 
@@ -97,7 +77,7 @@ public class UniformDistributionHistogram
             return Estimate.unknown();
         }
 
-        return Estimate.of((value - lowValue) / (highValue - lowValue));
+        return Estimate.of(min(1.0, max(0.0, ((value - lowValue) / (highValue - lowValue)))));
     }
 
     @Override
@@ -125,28 +105,11 @@ public class UniformDistributionHistogram
     }
 
     @Override
-    public Estimate cumulativeDistinctValues(double percentile)
-    {
-        verify(percentile >= 0.0 && percentile <= 1.0, "percentile must be in [0.0, 1.0]");
-        // case when distribution is a single value
-        if (lowValue == highValue && percentile < 1.0) {
-            return Estimate.zero();
-        }
-        if (percentile == 1.0) {
-            return distinctValuesCount;
-        }
-        Estimate distinctEstimate = cumulativeDistinctValues(1.0);
-
-        return distinctEstimate.map(values -> percentile * values);
-    }
-
-    @Override
     public String toString()
     {
         return toStringHelper(this)
                 .add("lowValue", lowValue)
                 .add("highValue", highValue)
-                .add("distinctValuesCount", distinctValuesCount)
                 .toString();
     }
 }

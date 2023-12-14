@@ -92,7 +92,7 @@ public class VariableStatsEstimate
             double averageRowSize,
             double distinctValuesCount)
     {
-        this(lowValue, highValue, nullsFraction, averageRowSize, distinctValuesCount, new UniformDistributionHistogram(lowValue, highValue, distinctValuesCount));
+        this(lowValue, highValue, nullsFraction, averageRowSize, distinctValuesCount, new UniformDistributionHistogram(lowValue, highValue));
     }
 
     @JsonProperty
@@ -274,7 +274,7 @@ public class VariableStatsEstimate
         public VariableStatsEstimate build()
         {
             return new VariableStatsEstimate(lowValue, highValue, nullsFraction, averageRowSize, distinctValuesCount,
-                    histogram.orElseGet(() -> new UniformDistributionHistogram(lowValue, highValue, distinctValuesCount)));
+                    histogram.orElseGet(() -> new UniformDistributionHistogram(lowValue, highValue)));
         }
     }
 }

@@ -99,28 +99,6 @@ public class DomainConstrainedHistogram
                 });
     }
 
-    @Override
-    public Estimate cumulativeDistinctValues(double percentile)
-    {
-        verify(percentile >= 0.0 && percentile <= 1.0, "percentile must be in [0.0, 1.0]");
-        if (percentile == 1.0) {
-            Estimate highDistinct = source.cumulativeProbability(range.getHigh(), true)
-                    .flatMap(source::cumulativeDistinctValues);
-            Estimate lowDistinct = source.cumulativeProbability(range.getLow(), true)
-                    .flatMap(source::cumulativeDistinctValues);
-            return highDistinct.flatMap(high -> lowDistinct.map(low -> high - low))
-                    .map(value -> min(range.getDistinctValuesCount(), max(1.0, value)))
-                    .or(() -> Estimate.of(range.getDistinctValuesCount()));
-        }
-        // distinct values of percentile - distinct values at low
-        return modifier.flatMap(mod ->
-                source.cumulativeProbability(range.getLow(), true).flatMap(lowPercent -> {
-                    Estimate lowDistinctValue = source.cumulativeDistinctValues(lowPercent);
-                    Estimate distinctValueSource = source.cumulativeDistinctValues(lowPercent + (percentile * mod));
-                    return lowDistinctValue.flatMap(lowDistinct -> distinctValueSource.map(distinctValues -> distinctValues - lowDistinct));
-                }));
-    }
-
     @JsonProperty
     public ConnectorHistogram getSource()
     {

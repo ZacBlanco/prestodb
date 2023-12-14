@@ -17,17 +17,14 @@ package com.facebook.presto.cost;
 import com.facebook.presto.spi.statistics.ConnectorHistogram;
 import org.apache.commons.math3.distribution.RealDistribution;
 import org.apache.commons.math3.distribution.UniformRealDistribution;
-import org.testng.annotations.Test;
-
-import static java.lang.Double.NEGATIVE_INFINITY;
-import static java.lang.Double.POSITIVE_INFINITY;
-import static org.testng.Assert.assertEquals;
 
 public class TestDomainConstrainedHistogram
         extends TestHistogram
 {
+    private double distinctValues;
+
     @Override
-    ConnectorHistogram createHistogram(double distinctValues)
+    ConnectorHistogram createHistogram()
     {
         RealDistribution dist = getDistribution();
         return new DomainConstrainedHistogram(new StatisticRange(
@@ -36,8 +33,7 @@ public class TestDomainConstrainedHistogram
                 distinctValues),
                 new UniformDistributionHistogram(
                         dist.inverseCumulativeProbability(0.0) - 1,
-                        dist.inverseCumulativeProbability(1.0) + 1,
-                        distinctValues));
+                        dist.inverseCumulativeProbability(1.0) + 1));
     }
 
     @Override
@@ -46,11 +42,11 @@ public class TestDomainConstrainedHistogram
         return new UniformRealDistribution();
     }
 
-    @Test
-    public void testDistinctFromInfiniteRange()
+    /**
+     * Domain constrained histogram doesn't support inclusive/exclusive arguments
+     */
+    @Override
+    public void testInclusiveExclusive()
     {
-        ConnectorHistogram source = new UniformDistributionHistogram(NEGATIVE_INFINITY, POSITIVE_INFINITY, 7.0);
-        DomainConstrainedHistogram hist = new DomainConstrainedHistogram(new StatisticRange(NEGATIVE_INFINITY, POSITIVE_INFINITY, 5.0), source);
-        assertEquals(hist.cumulativeDistinctValues(1.0).getValue(), 5.0);
     }
 }

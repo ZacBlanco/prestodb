@@ -29,9 +29,9 @@ import static org.testng.Assert.assertTrue;
 public class TestUniformHistogram
         extends TestHistogram
 {
-    ConnectorHistogram createHistogram(double distinctValues)
+    ConnectorHistogram createHistogram()
     {
-        return new UniformDistributionHistogram(0, 1, distinctValues);
+        return new UniformDistributionHistogram(0, 1);
     }
 
     RealDistribution getDistribution()
@@ -42,36 +42,27 @@ public class TestUniformHistogram
     @Test
     public void testInvalidConstruction()
     {
-        assertThrows(VerifyException.class, () -> new UniformDistributionHistogram(2.0, 1.0, 2.0));
-    }
-
-    @Test
-    public void testSingleValueRangeDistinct()
-    {
-        assertEquals(new UniformDistributionHistogram(1.0, 1.0, 2.0).getDistinctValuesCount().getValue(), 1.0);
+        assertThrows(VerifyException.class, () -> new UniformDistributionHistogram(2.0, 1.0));
     }
 
     @Test
     public void testNanRangeValues()
     {
-        ConnectorHistogram hist = new UniformDistributionHistogram(Double.NaN, 2, 2);
+        ConnectorHistogram hist = new UniformDistributionHistogram(Double.NaN, 2);
         assertTrue(hist.inverseCumulativeProbability(0.5).isUnknown());
-        assertEquals(hist.cumulativeDistinctValues(0.5).getValue(), 1.0);
 
-        hist = new UniformDistributionHistogram(1.0, Double.NaN, 2);
+        hist = new UniformDistributionHistogram(1.0, Double.NaN);
         assertTrue(hist.inverseCumulativeProbability(0.5).isUnknown());
-        assertEquals(hist.cumulativeDistinctValues(0.5).getValue(), 1.0);
 
-        hist = new UniformDistributionHistogram(1.0, 2.0, Double.NaN);
+        hist = new UniformDistributionHistogram(1.0, 2.0);
         assertEquals(hist.inverseCumulativeProbability(0.5).getValue(), 1.5);
-        assertTrue(hist.cumulativeDistinctValues(0.5).isUnknown());
     }
 
     @Test
     public void testInfiniteRangeValues()
     {
         // test low value as infinite
-        ConnectorHistogram hist = new UniformDistributionHistogram(Double.NEGATIVE_INFINITY, 2, 2);
+        ConnectorHistogram hist = new UniformDistributionHistogram(Double.NEGATIVE_INFINITY, 2);
 
         assertTrue(hist.inverseCumulativeProbability(0.5).isUnknown());
         assertEquals(hist.inverseCumulativeProbability(0.0), Estimate.unknown());
@@ -82,10 +73,8 @@ public class TestUniformHistogram
         assertEquals(hist.cumulativeProbability(2.0, true).getValue(), 1.0);
         assertEquals(hist.cumulativeProbability(2.5, true).getValue(), 1.0);
 
-        assertEquals(hist.cumulativeDistinctValues(0.5).getValue(), 1.0);
-
         // test high value as infinite
-        hist = new UniformDistributionHistogram(1.0, POSITIVE_INFINITY, 2);
+        hist = new UniformDistributionHistogram(1.0, POSITIVE_INFINITY);
 
         assertTrue(hist.inverseCumulativeProbability(0.5).isUnknown());
         assertEquals(hist.inverseCumulativeProbability(0.0).getValue(), 1.0);
@@ -94,16 +83,12 @@ public class TestUniformHistogram
         assertEquals(hist.cumulativeProbability(0.0, true).getValue(), 0.0);
         assertEquals(hist.cumulativeProbability(1.0, true).getValue(), 0.0);
         assertEquals(hist.cumulativeProbability(1.5, true), Estimate.unknown());
-
-        assertEquals(hist.cumulativeDistinctValues(0.5).getValue(), 1.0);
-        assertEquals(hist.cumulativeDistinctValues(0.0).getValue(), 0.0);
-        assertEquals(hist.cumulativeDistinctValues(1.0).getValue(), 2.0);
     }
 
     @Test
     public void testSingleValueRange()
     {
-        UniformDistributionHistogram hist = new UniformDistributionHistogram(1.0, 1.0, 1.0);
+        UniformDistributionHistogram hist = new UniformDistributionHistogram(1.0, 1.0);
 
         assertEquals(hist.inverseCumulativeProbability(0.0).getValue(), 1.0);
         assertEquals(hist.inverseCumulativeProbability(1.0).getValue(), 1.0);
@@ -113,9 +98,13 @@ public class TestUniformHistogram
         assertEquals(hist.cumulativeProbability(0.5, true).getValue(), 0.0);
         assertEquals(hist.cumulativeProbability(1.0, true).getValue(), 1.0);
         assertEquals(hist.cumulativeProbability(1.5, true).getValue(), 1.0);
+    }
 
-        assertEquals(hist.cumulativeDistinctValues(0.0).getValue(), 0.0);
-        assertEquals(hist.cumulativeDistinctValues(0.5).getValue(), 0.0);
-        assertEquals(hist.cumulativeDistinctValues(1.0).getValue(), 1.0);
+    /**
+     * {@link UniformDistributionHistogram} does not support the inclusive/exclusive arguments
+     */
+    @Override
+    public void testInclusiveExclusive()
+    {
     }
 }

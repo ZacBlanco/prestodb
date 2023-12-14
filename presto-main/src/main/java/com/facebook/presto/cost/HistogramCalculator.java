@@ -33,17 +33,19 @@ public class HistogramCalculator
      * Calculates the "filter factor" corresponding to the overlap between the statistic range
      * and the histogram distribution.
      * <br>
-     * The filter factor is a value between 0 and 1 that represents the proportion of tuples in the
-     * source column that would be included from the source column if the source column only
-     * included values that existed in the {@code range} parameter of this function.
+     * The filter factor is a fractional value in [0.0, 1.0] that represents the proportion of
+     * tuples in the source column that would be included in the result of a filter where the valid
+     * values in the filter are represented by the {@code range} parameter of this function.
      *
      * @param range the intersecting range with the histogram
      * @param histogram the source histogram
      *
      * @return an estimate, x,  where 0.0 <= x <= 1.0.
      */
-    public static Estimate calculateFilterFactor(StatisticRange range, ConnectorHistogram histogram)
+    public static Estimate calculateFilterFactor(StatisticRange range, ConnectorHistogram histogram, Estimate totalDistinctValues)
     {
+        boolean openHigh = range.getOpenHigh();
+        boolean openLow = range.getOpenLow();
         Estimate min = histogram.inverseCumulativeProbability(0.0);
         Estimate max = histogram.inverseCumulativeProbability(1.0);
 
@@ -55,8 +57,9 @@ public class HistogramCalculator
 
         // one of the max/min bounds can't be determined
         if ((max.isUnknown() && !min.isUnknown()) || (!max.isUnknown() && min.isUnknown())) {
+            // when the range length is 0, the filter factor should be 1/distinct value count
             if (range.length() == 0.0) {
-                return histogram.cumulativeDistinctValues(1.0).map(distinct -> 1.0 / distinct);
+                return totalDistinctValues.map(distinct -> 1.0 / distinct);
             }
             if (isFinite(range.length())) {
                 return Estimate.of(StatisticRange.INFINITE_TO_FINITE_RANGE_INTERSECT_OVERLAP_HEURISTIC_FACTOR);
@@ -64,13 +67,22 @@ public class HistogramCalculator
             return Estimate.of(StatisticRange.INFINITE_TO_INFINITE_RANGE_INTERSECT_OVERLAP_HEURISTIC_FACTOR);
         }
 
-        Estimate lowPercentile = histogram.cumulativeProbability(range.getLow(), true);
-        Estimate highPercentile = histogram.cumulativeProbability(range.getHigh(), true);
+        // we know the bounds are both known, so calculate the percentile for each bound
+        // The inclusivity arguments can be derived from the open-ness of the interval we're
+        // calculating the filter factor for
+        // e.g. given a variable with values in [0, 10] to calculate the filter of
+        // [1, 9) (openness: false, true) we need the percentile from
+        // [0.0 to 1.0) (openness: false, true) and from [0.0, 9.0) (openness: false, true)
+        // thus for the "lowPercentile" calculation we should pass "false" to be non-inclusive
+        // (same as openness) however, on the high-end we want the inclusivity to be the opposite
+        // of the openness since if it's open, we _don't_ want to include the bound.
+        Estimate lowPercentile = histogram.cumulativeProbability(range.getLow(), openLow);
+        Estimate highPercentile = histogram.cumulativeProbability(range.getHigh(), !openHigh);
 
         // both bounds are probably infinity, use the infinite-infinite heuristic
         if (lowPercentile.isUnknown() || highPercentile.isUnknown()) {
             // in the case the histogram has no values
-            if (histogram.cumulativeDistinctValues(1.0).equals(Estimate.zero()) || range.getDistinctValuesCount() == 0.0) {
+            if (totalDistinctValues.equals(Estimate.zero()) || range.getDistinctValuesCount() == 0.0) {
                 return Estimate.of(0.0);
             }
 
@@ -82,11 +94,11 @@ public class HistogramCalculator
             }
 
             if (range.length() == 0.0) {
-                return histogram.cumulativeDistinctValues(1.0).map(distinct -> 1.0 / distinct);
+                return totalDistinctValues.map(distinct -> 1.0 / distinct);
             }
 
             if (!isNaN(range.getDistinctValuesCount())) {
-                return histogram.cumulativeDistinctValues(1.0).map(distinct -> min(1.0, range.getDistinctValuesCount() / distinct));
+                return totalDistinctValues.map(distinct -> min(1.0, range.getDistinctValuesCount() / distinct));
             }
 
             return Estimate.of(StatisticRange.INFINITE_TO_INFINITE_RANGE_INTERSECT_OVERLAP_HEURISTIC_FACTOR);
@@ -101,31 +113,30 @@ public class HistogramCalculator
             // If one of the bounds is unknown, but both percentiles are equal,
             // it's likely that a heuristic value was returned
             if (max.isUnknown() || min.isUnknown()) {
-                return histogram.cumulativeDistinctValues(1.0).flatMap(distinct -> lowPercentile.map(lowPercent -> distinct * lowPercent));
+                return totalDistinctValues.flatMap(distinct -> lowPercentile.map(lowPercent -> distinct * lowPercent));
             }
 
-            return histogram.cumulativeDistinctValues(1.0).map(distinct -> 1.0 / distinct);
+            return totalDistinctValues.map(distinct -> 1.0 / distinct);
         }
 
         // in the case that we return the entire range, the returned factor percent should be
         // proportional to the number of distinct values in the range
         if (lowPercentile.equals(Estimate.zero()) && highPercentile.equals(Estimate.of(1.0)) && min.isUnknown() && max.isUnknown()) {
-            return histogram.cumulativeDistinctValues(1.0).map(totalDistinct -> min(1.0, range.getDistinctValuesCount() / totalDistinct))
+            return totalDistinctValues.map(totalDistinct -> min(1.0, range.getDistinctValuesCount() / totalDistinct))
                     // in the case cumulativeDistinctValues(1.0) is NaN
                     .or(() -> Estimate.of(StatisticRange.INFINITE_TO_INFINITE_RANGE_INTERSECT_OVERLAP_HEURISTIC_FACTOR));
         }
 
         return Optional.of(lowPercentile)
-                .filter(x -> !x.isUnknown())
+                .filter(lowPercent -> !lowPercent.isUnknown())
                 .map(Estimate::getValue)
-                .map(lowPercent -> {
-                    return Optional.of(highPercentile)
-                            .filter(x -> !x.isUnknown())
-                            .map(Estimate::getValue)
-                            .map(highPercent -> highPercent - lowPercent)
-                            .map(Estimate::of)
-                            .orElseGet(() -> Estimate.of(1.0));
-                }).orElse(highPercentile);
+                .map(lowPercent -> Optional.of(highPercentile)
+                        .filter(highPercent -> !highPercent.isUnknown())
+                        .map(Estimate::getValue)
+                        .map(highPercent -> highPercent - lowPercent)
+                        .map(Estimate::of)
+                        .orElseGet(() -> Estimate.of(1.0)))
+                .orElse(highPercentile);
     }
 
     /**
@@ -135,7 +146,8 @@ public class HistogramCalculator
      * For example: [0,1] overlaps [0, 10] from 0 --> 1 on a number line, representing 10% of the
      * source range. Thus, the value returned here would be 10%.
      * <br>
-     * This function is similar to {@link HistogramCalculator#calculateFilterFactor(StatisticRange, ConnectorHistogram)}
+     * This function is similar to
+     * {@link HistogramCalculator#calculateFilterFactor(StatisticRange, ConnectorHistogram, Estimate)}
      * except that it does not return heuristics and only considers range values to calculate the
      * overlapping proportion of the ranges.
      */
@@ -144,7 +156,6 @@ public class HistogramCalculator
         Estimate lowValue = source.inverseCumulativeProbability(0.0);
         Estimate highValue = source.inverseCumulativeProbability(1.0);
 
-        // Attempt to return any kind of estimate first
         if ((!lowValue.isUnknown() && range.getHigh() <= lowValue.getValue()) ||
                 (!highValue.isUnknown() && range.getLow() >= highValue.getValue())) {
             return Estimate.of(0.0);
@@ -166,12 +177,12 @@ public class HistogramCalculator
             if (overlap < 0) {
                 return Estimate.of(0.0);
             }
-            return sourceLength.map(src -> {
-                // in the case of src representing a single-value domain
-                if (overlap == 0.0 && src == 0.0) {
+            return sourceLength.map(srcLength -> {
+                // in the case of srcLength representing a single-value domain
+                if (overlap == 0.0 && srcLength == 0.0) {
                     return 1.0;
                 }
-                return overlap / src;
+                return overlap / srcLength;
             });
         });
     }

@@ -27,20 +27,20 @@ import static org.testng.Assert.assertTrue;
 
 public abstract class TestHistogram
 {
-    abstract ConnectorHistogram createHistogram(double distinctValues);
+    abstract ConnectorHistogram createHistogram();
 
     abstract RealDistribution getDistribution();
 
     @Test
     public void testValueAtPercentile()
     {
-        ConnectorHistogram hist = createHistogram(100);
+        ConnectorHistogram hist = createHistogram();
         RealDistribution dist = getDistribution();
         assertThrows(VerifyException.class, () -> hist.inverseCumulativeProbability(Double.NaN));
         assertThrows(VerifyException.class, () -> hist.inverseCumulativeProbability(-1.0));
         assertThrows(VerifyException.class, () -> hist.inverseCumulativeProbability(2.0));
         assertEquals(hist.inverseCumulativeProbability(0.0).getValue(), dist.getSupportLowerBound(), .001);
-        assertEquals(hist.inverseCumulativeProbability(0.25).getValue(), dist.inverseCumulativeProbability(0.25));
+        assertEquals(hist.inverseCumulativeProbability(0.25).getValue(), dist.inverseCumulativeProbability(0.25), .01);
         assertEquals(hist.inverseCumulativeProbability(0.5).getValue(), dist.getNumericalMean(), .001);
         assertEquals(hist.inverseCumulativeProbability(1.0).getValue(), dist.getSupportUpperBound(), .001);
     }
@@ -48,12 +48,14 @@ public abstract class TestHistogram
     @Test
     public void testPercentileAtValue()
     {
-        ConnectorHistogram hist = createHistogram(100);
+        ConnectorHistogram hist = createHistogram();
         RealDistribution dist = getDistribution();
 
         assertTrue(hist.cumulativeProbability(Double.NaN, true).isUnknown());
         assertEquals(hist.cumulativeProbability(NEGATIVE_INFINITY, true).getValue(), 0.0, .001);
+        assertEquals(hist.cumulativeProbability(NEGATIVE_INFINITY, false).getValue(), 0.0, .001);
         assertEquals(hist.cumulativeProbability(POSITIVE_INFINITY, true).getValue(), 1.0, .001);
+        assertEquals(hist.cumulativeProbability(POSITIVE_INFINITY, false).getValue(), 1.0, .001);
 
         assertEquals(hist.cumulativeProbability(dist.getSupportLowerBound() - 1, true).getValue(), 0.0, .001);
         assertEquals(hist.cumulativeProbability(dist.getSupportLowerBound(), true).getValue(), 0.0, .001);
@@ -63,5 +65,26 @@ public abstract class TestHistogram
         for (int i = 0; i < 10; i++) {
             assertEquals(hist.cumulativeProbability(dist.inverseCumulativeProbability(0.1 * i), true).getValue(), dist.cumulativeProbability(0.1 * i), .001);
         }
+    }
+
+    @Test
+    public void testInclusiveExclusive()
+    {
+        int ndvs = 100;
+        ConnectorHistogram hist = createHistogram();
+
+        double value = hist.inverseCumulativeProbability(0.00).getValue();
+        assertEquals(hist.cumulativeProbability(value, false).getValue(), 0.0, .0000001);
+        // test maximums
+        assertEquals(hist.cumulativeProbability(hist.inverseCumulativeProbability(1.0).getValue(), false).getValue(), 1.0 - (1.0 / ndvs), .0001);
+        assertEquals(hist.cumulativeProbability(hist.inverseCumulativeProbability(1.0).getValue(), true).getValue(), 1.0, .0001);
+
+        // test minimums
+        assertEquals(hist.cumulativeProbability(hist.inverseCumulativeProbability(0.0).getValue(), false).getValue(), 0.0, .0001);
+        assertEquals(hist.cumulativeProbability(hist.inverseCumulativeProbability(0.0).getValue(), true).getValue(), 0.0, .0001);
+
+        // test non-max/min
+        double midPercent = hist.inverseCumulativeProbability(0.5).getValue();
+        assertEquals(hist.cumulativeProbability(midPercent, true).getValue() - hist.cumulativeProbability(midPercent, false).getValue(), 1.0 / ndvs, .0001);
     }
 }

@@ -23,7 +23,12 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
  * <br>
  * Currently, this interface supports representing histograms of columns whose
  * domains map to real values.
+ * <br>
+ * Null values should not be represented in underlying histogram implementation.
+ * When calculating filter statistics using the {@link ColumnStatisticType#NUMBER_OF_NON_NULL_VALUES}
+ * are used to account for nulls in cost-based calculations.
  *
+ * @see ColumnStatisticType#NUMBER_OF_NON_NULL_VALUES
  */
 @JsonTypeInfo(use = JsonTypeInfo.Id.MINIMAL_CLASS, property = "@class")
 public interface ConnectorHistogram
@@ -33,10 +38,15 @@ public interface ConnectorHistogram
      * falls in a distribution.
      * <br>
      * Put another way, this function returns the value of F(x) where F(x)
-     * represents the CDF of this particular distribution
+     * represents the CDF of this particular distribution. Traditionally, the
+     * true CDF of a random variable X is represented by F(x) = P(x <= X). This
+     * function signature allows for a slight modification by using the
+     * {@code inclusive} parameter to return the value for F(x) = P(x < X)
+     * should the underlying implementation support it.
      *
      * @param value the value to calculate percentile
-     * @return an Estimate of the percentile
+     * @param inclusive whether this calculation should be inclusive or exclusive of the value (<= or <)
+     * @return an {@link Estimate} of the percentile
      */
     Estimate cumulativeProbability(double value, boolean inclusive);
 
@@ -51,14 +61,4 @@ public interface ConnectorHistogram
      * @return the value in the distribution corresponding to the percentile
      */
     Estimate inverseCumulativeProbability(double percentile);
-
-    /**
-     * Returns the total number of distinct values in the distribution which
-     * occur in the distribution up to the value corresponding to the given
-     * percentile.
-     *
-     * @param percentile the percentile to query
-     * @return the number of distinct values falling less than the percentile
-     */
-    Estimate cumulativeDistinctValues(double percentile);
 }
