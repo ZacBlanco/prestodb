@@ -40,7 +40,7 @@ public abstract class TestHistogram
         assertThrows(VerifyException.class, () -> hist.inverseCumulativeProbability(-1.0));
         assertThrows(VerifyException.class, () -> hist.inverseCumulativeProbability(2.0));
         assertEquals(hist.inverseCumulativeProbability(0.0).getValue(), dist.getSupportLowerBound(), .001);
-        assertEquals(hist.inverseCumulativeProbability(0.25).getValue(), dist.inverseCumulativeProbability(0.25), .01);
+        assertEquals(hist.inverseCumulativeProbability(0.25).getValue(), dist.inverseCumulativeProbability(0.25), .001);
         assertEquals(hist.inverseCumulativeProbability(0.5).getValue(), dist.getNumericalMean(), .001);
         assertEquals(hist.inverseCumulativeProbability(1.0).getValue(), dist.getSupportUpperBound(), .001);
     }

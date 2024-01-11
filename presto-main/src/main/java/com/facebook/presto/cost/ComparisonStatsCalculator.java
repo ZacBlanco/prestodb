@@ -184,7 +184,7 @@ public final class ComparisonStatsCalculator
             }
         }
         else {
-            filterEstimate = Estimate.of(variableRange.overlapPercentWith(intersectRange));
+            filterEstimate = Estimate.estimateFromDouble(variableRange.overlapPercentWith(intersectRange));
         }
 
         return filterEstimate.orElse(() -> UNKNOWN_FILTER_COEFFICIENT);

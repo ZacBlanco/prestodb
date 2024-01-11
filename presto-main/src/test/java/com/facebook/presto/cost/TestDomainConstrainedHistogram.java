@@ -21,8 +21,6 @@ import org.apache.commons.math3.distribution.UniformRealDistribution;
 public class TestDomainConstrainedHistogram
         extends TestHistogram
 {
-    private double distinctValues;
-
     @Override
     ConnectorHistogram createHistogram()
     {
@@ -30,7 +28,7 @@ public class TestDomainConstrainedHistogram
         return new DomainConstrainedHistogram(new StatisticRange(
                 dist.inverseCumulativeProbability(0.0),
                 dist.inverseCumulativeProbability(1.0),
-                distinctValues),
+                0),
                 new UniformDistributionHistogram(
                         dist.inverseCumulativeProbability(0.0) - 1,
                         dist.inverseCumulativeProbability(1.0) + 1));

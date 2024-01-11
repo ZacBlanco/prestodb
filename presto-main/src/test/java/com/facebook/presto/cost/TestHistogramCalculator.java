@@ -18,8 +18,6 @@ import com.facebook.presto.spi.statistics.ConnectorHistogram;
 import com.facebook.presto.spi.statistics.Estimate;
 import org.testng.annotations.Test;
 
-import java.util.Optional;
-
 import static com.facebook.presto.cost.HistogramCalculator.calculateFilterFactor;
 import static com.facebook.presto.cost.HistogramCalculator.calculateRangeOverlap;
 import static java.lang.Double.NEGATIVE_INFINITY;
@@ -134,11 +132,7 @@ public class TestHistogramCalculator
     private static void assertFilterFactor(Estimate expected, StatisticRange range, ConnectorHistogram histogram, double totalDistinctValues)
     {
         assertEquals(
-                calculateFilterFactor(range, histogram,
-                        Optional.of(totalDistinctValues)
-                                .filter(value -> !value.isNaN())
-                                .map(Estimate::of)
-                                .orElse(Estimate.unknown())),
+                calculateFilterFactor(range, histogram, Estimate.estimateFromDouble(totalDistinctValues)),
                 expected);
     }
 

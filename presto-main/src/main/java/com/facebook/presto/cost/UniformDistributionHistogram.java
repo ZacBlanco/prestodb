@@ -26,6 +26,13 @@ import static java.lang.Double.isNaN;
 import static java.lang.Math.max;
 import static java.lang.Math.min;
 
+/**
+ * This {@link ConnectorHistogram} implementation returns values assuming a
+ * uniform distribution between a given high and low value.
+ * <br>
+ * In the case that statistics don't exist for a particular table, the Presto
+ * optimizer will fall back on this uniform distribution assumption.
+ */
 public class UniformDistributionHistogram
         implements ConnectorHistogram
 {
@@ -40,7 +47,6 @@ public class UniformDistributionHistogram
         verify(isNaN(lowValue) || isNaN(highValue) || (lowValue <= highValue), "lowValue must be <= highValue");
         this.lowValue = lowValue;
         this.highValue = highValue;
-        // force equal range bounds to equal 1.0
     }
 
     @JsonProperty
@@ -69,7 +75,6 @@ public class UniformDistributionHistogram
         }
 
         if (value <= lowValue) {
-            // no adjustment factor here as if the value is <= min the result is already 0.
             return Estimate.of(0.0);
         }
 
