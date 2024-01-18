@@ -77,7 +77,7 @@ public abstract class AbstractCostBasedPlanTest
 
     private String getQueryPlanResourcePath(String queryResourcePath)
     {
-        return queryResourcePath.replaceAll("\\.sql$", ".plan.txt");
+        return queryResourcePath.replaceAll("\\.sql$", ".plan");
     }
 
     public void generate()
