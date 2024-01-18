@@ -155,7 +155,7 @@ public final class ComparisonStatsCalculator
                             .setAverageRowSize(expressionStatistics.getAverageRowSize())
                             .setStatisticsRange(intersectRange)
                             .setNullsFraction(0.0)
-                            .setHistogram(new DomainConstrainedHistogram(intersectRange, expressionStatistics.getHistogram()))
+                            .setHistogram(DisjointRangeDomainHistogram.addConjunction(expressionStatistics.getHistogram(), intersectRange))
                             .build();
             estimate = estimate.mapVariableColumnStatistics(expressionVariable.get(), oldStats -> symbolNewEstimate);
         }
@@ -169,7 +169,7 @@ public final class ComparisonStatsCalculator
         Estimate filterEstimate;
         if (session.map(SystemSessionProperties::shouldOptimizerUseHistograms).orElse(false)) {
             Estimate distinctEstimate = isNaN(variableStatistics.getDistinctValuesCount()) ? Estimate.unknown() : Estimate.of(variableRange.getDistinctValuesCount());
-            filterEstimate = HistogramCalculator.calculateFilterFactor(intersectRange, variableStatistics.getHistogram(), distinctEstimate);
+            filterEstimate = HistogramCalculator.calculateFilterFactor(intersectRange, variableStatistics.getHistogram(), distinctEstimate, true);
             if (log.isDebugEnabled()) {
                 double expressionFilter = variableRange.overlapPercentWith(intersectRange);
                 if (!Double.isNaN(expressionFilter) &&

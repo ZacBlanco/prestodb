@@ -15,12 +15,17 @@ package com.facebook.presto.cost;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.google.common.collect.BoundType;
+import com.google.common.collect.Range;
 
 import java.util.Objects;
 
+import static com.facebook.presto.util.MoreMath.nearlyEqual;
 import static com.google.common.base.MoreObjects.toStringHelper;
 import static com.google.common.base.Preconditions.checkArgument;
+import static java.lang.Double.NEGATIVE_INFINITY;
 import static java.lang.Double.NaN;
+import static java.lang.Double.POSITIVE_INFINITY;
 import static java.lang.Double.isFinite;
 import static java.lang.Double.isInfinite;
 import static java.lang.Double.isNaN;
@@ -182,8 +187,11 @@ public class StatisticRange
     {
         double newLow = max(low, other.low);
         boolean newOpenLow = newLow == low ? openLow : other.openLow;
+        // epsilon is an arbitrary choice
+        newOpenLow = nearlyEqual(low, other.low, 1E-10) ? openLow || other.openLow : newOpenLow;
         double newHigh = min(high, other.high);
         boolean newOpenHigh = newHigh == high ? openHigh : other.openHigh;
+        newOpenHigh = nearlyEqual(high, other.high, 1E-10) ? openHigh || other.openHigh : newOpenHigh;
         if (newLow <= newHigh) {
             return new StatisticRange(newLow, newOpenLow, newHigh, newOpenHigh, overlappingDistinctValues(other));
         }
@@ -212,6 +220,21 @@ public class StatisticRange
         double newDistinctValues = maxOverlappingValues + (1 - overlapPercentOfThis) * distinctValues + (1 - overlapPercentOfOther) * other.distinctValues;
 
         return expandRangeWithNewDistinct(newDistinctValues, other);
+    }
+
+    public Range<Double> toRange()
+    {
+        return Range.range(low, openLow ? BoundType.OPEN : BoundType.CLOSED, high, openHigh ? BoundType.OPEN : BoundType.CLOSED);
+    }
+
+    public static StatisticRange fromRange(Range<Double> range)
+    {
+        return new StatisticRange(
+                range.hasLowerBound() ? range.lowerEndpoint() : NEGATIVE_INFINITY,
+                !range.hasLowerBound() || range.lowerBoundType() == BoundType.OPEN,
+                range.hasUpperBound() ? range.upperEndpoint() : POSITIVE_INFINITY,
+                !range.hasUpperBound() || range.upperBoundType() == BoundType.OPEN,
+                NaN);
     }
 
     private StatisticRange expandRangeWithNewDistinct(double newDistinctValues, StatisticRange other)
@@ -282,7 +305,7 @@ public class StatisticRange
     public String toString()
     {
         return toStringHelper(this)
-                .add("range", format("%s%s-%s%s", openLow ? "(" : "[", low, high, openHigh ? ")" : "]"))
+                .add("range", format("%s%s..%s%s", openLow ? "(" : "[", low, high, openHigh ? ")" : "]"))
                 .add("ndv", distinctValues)
                 .toString();
     }

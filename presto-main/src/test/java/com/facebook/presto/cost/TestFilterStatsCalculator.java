@@ -424,7 +424,7 @@ public class TestFilterStatsCalculator
 
         // Left side open, cut on open side
         assertExpression("leftOpen BETWEEN DOUBLE '-10' AND 10e0")
-                .outputRowsCount(180.0)
+                .outputRowsCount(56.25)
                 .variableStats(new VariableReferenceExpression(Optional.empty(), "leftOpen", DOUBLE), variableStats ->
                         variableStats.distinctValuesCount(10.0)
                                 .lowValue(-10.0)
@@ -433,7 +433,7 @@ public class TestFilterStatsCalculator
 
         // Right side open, cut on open side
         assertExpression("rightOpen BETWEEN DOUBLE '-10' AND 10e0")
-                .outputRowsCount(180.0)
+                .outputRowsCount(56.25)
                 .variableStats(new VariableReferenceExpression(Optional.empty(), "rightOpen", DOUBLE), variableStats ->
                         variableStats.distinctValuesCount(10.0)
                                 .lowValue(-10.0)

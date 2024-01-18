@@ -39,6 +39,12 @@ public class TestUniformHistogram
         return new UniformRealDistribution();
     }
 
+    @Override
+    double getDistinctValues()
+    {
+        return 100;
+    }
+
     @Test
     public void testInvalidConstruction()
     {

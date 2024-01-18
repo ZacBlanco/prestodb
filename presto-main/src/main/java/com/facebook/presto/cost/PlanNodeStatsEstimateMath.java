@@ -13,6 +13,7 @@
  */
 package com.facebook.presto.cost;
 
+import static com.facebook.presto.cost.DisjointRangeDomainHistogram.addConjunction;
 import static com.google.common.base.Preconditions.checkArgument;
 import static java.lang.Double.NaN;
 import static java.lang.Double.isNaN;
@@ -119,16 +120,18 @@ public class PlanNodeStatsEstimateMath
             // for simplicity keep the average row size the same as in the input
             // in most cases the average row size doesn't change after applying filters
             newSymbolStats.setAverageRowSize(symbolStats.getAverageRowSize());
-
             newSymbolStats.setDistinctValuesCount(min(symbolStats.getDistinctValuesCount(), capSymbolStats.getDistinctValuesCount()));
-            newSymbolStats.setLowValue(max(symbolStats.getLowValue(), capSymbolStats.getLowValue()));
-            newSymbolStats.setHighValue(min(symbolStats.getHighValue(), capSymbolStats.getHighValue()));
+            double newLow = max(symbolStats.getLowValue(), capSymbolStats.getLowValue());
+            double newHigh = min(symbolStats.getHighValue(), capSymbolStats.getHighValue());
+            newSymbolStats.setLowValue(newLow);
+            newSymbolStats.setHighValue(newHigh);
 
             double numberOfNulls = stats.getOutputRowCount() * symbolStats.getNullsFraction();
             double capNumberOfNulls = cap.getOutputRowCount() * capSymbolStats.getNullsFraction();
             double cappedNumberOfNulls = min(numberOfNulls, capNumberOfNulls);
             double cappedNullsFraction = cappedRowCount == 0 ? 1 : cappedNumberOfNulls / cappedRowCount;
             newSymbolStats.setNullsFraction(cappedNullsFraction);
+            newSymbolStats.setHistogram(addConjunction(symbolStats.getHistogram(), new StatisticRange(newLow, newHigh, 0)));
 
             result.addVariableStatistics(symbol, newSymbolStats.build());
         });
@@ -264,7 +267,7 @@ public class PlanNodeStatsEstimateMath
                 .setStatisticsRange(sum)
                 .setAverageRowSize(newAverageRowSize)
                 .setNullsFraction(newNullsFraction)
-                // TODO: propagate a union of histograms here.
+                .setHistogram(DisjointRangeDomainHistogram.addDisjunction(leftStats.getHistogram(), rightRange))
                 .build();
     }
 }

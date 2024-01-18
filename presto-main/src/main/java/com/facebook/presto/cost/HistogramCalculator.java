@@ -22,7 +22,6 @@ import java.util.Optional;
 
 import static java.lang.Double.isFinite;
 import static java.lang.Double.isNaN;
-import static java.lang.Math.max;
 import static java.lang.Math.min;
 
 public class HistogramCalculator
@@ -40,9 +39,13 @@ public class HistogramCalculator
      *
      * @param range the intersecting range with the histogram
      * @param histogram the source histogram
-     * @return an estimate, x,  where 0.0 <= x <= 1.0.
+     * @param totalDistinctValues the total number of distinct values in the domain of the histogram
+     * @param useHeuristics whether to return heuristic values based on constants and/or distinct
+     * value counts. If false, {@link Estimate#unknown()} will be returned in any case a
+     * heuristic would have been used
+     * @return an estimate, x, where 0.0 <= x <= 1.0.
      */
-    public static Estimate calculateFilterFactor(StatisticRange range, ConnectorHistogram histogram, Estimate totalDistinctValues)
+    public static Estimate calculateFilterFactor(StatisticRange range, ConnectorHistogram histogram, Estimate totalDistinctValues, boolean useHeuristics)
     {
         boolean openHigh = range.getOpenHigh();
         boolean openLow = range.getOpenLow();
@@ -58,9 +61,14 @@ public class HistogramCalculator
         // one of the max/min bounds can't be determined
         if ((max.isUnknown() && !min.isUnknown()) || (!max.isUnknown() && min.isUnknown())) {
             // when the range length is 0, the filter factor should be 1/distinct value count
+            if (!useHeuristics) {
+                return Estimate.unknown();
+            }
+
             if (range.length() == 0.0) {
                 return totalDistinctValues.map(distinct -> 1.0 / distinct);
             }
+
             if (isFinite(range.length())) {
                 return Estimate.of(StatisticRange.INFINITE_TO_FINITE_RANGE_INTERSECT_OVERLAP_HEURISTIC_FACTOR);
             }
@@ -81,6 +89,9 @@ public class HistogramCalculator
 
         // both bounds are probably infinity, use the infinite-infinite heuristic
         if (lowPercentile.isUnknown() || highPercentile.isUnknown()) {
+            if (!useHeuristics) {
+                return Estimate.unknown();
+            }
             // in the case the histogram has no values
             if (totalDistinctValues.equals(Estimate.zero()) || range.getDistinctValuesCount() == 0.0) {
                 return Estimate.of(0.0);
@@ -90,7 +101,7 @@ public class HistogramCalculator
             if (((lowPercentile.isUnknown() && !highPercentile.isUnknown()) ||
                     (!lowPercentile.isUnknown() && highPercentile.isUnknown())) &&
                     isFinite(range.length())) {
-                return Estimate.of(StatisticRange.INFINITE_TO_FINITE_RANGE_INTERSECT_OVERLAP_HEURISTIC_FACTOR);
+                return useHeuristics ? Estimate.of(StatisticRange.INFINITE_TO_FINITE_RANGE_INTERSECT_OVERLAP_HEURISTIC_FACTOR) : Estimate.unknown();
             }
 
             if (range.length() == 0.0) {
@@ -110,6 +121,9 @@ public class HistogramCalculator
         // in the case of infinite bounds, we should return an estimate that
         // correlates to the overlapping distinct values.
         if (lowPercentile.equals(highPercentile)) {
+            if (!useHeuristics) {
+                return Estimate.zero();
+            }
             // If one of the bounds is unknown, but both percentiles are equal,
             // it's likely that a heuristic value was returned
             if (max.isUnknown() || min.isUnknown()) {
@@ -122,6 +136,10 @@ public class HistogramCalculator
         // in the case that we return the entire range, the returned factor percent should be
         // proportional to the number of distinct values in the range
         if (lowPercentile.equals(Estimate.zero()) && highPercentile.equals(Estimate.of(1.0)) && min.isUnknown() && max.isUnknown()) {
+            if (!useHeuristics) {
+                return Estimate.unknown();
+            }
+
             if (totalDistinctValues.equals(Estimate.zero())) {
                 return Estimate.of(1.0);
             }
@@ -131,8 +149,8 @@ public class HistogramCalculator
                 }
                 return Estimate.of(min(1.0, range.getDistinctValuesCount() / totalDistinct));
             })
-                // in the case totalDistinct is NaN or 0
-                .or(() -> Estimate.of(StatisticRange.INFINITE_TO_INFINITE_RANGE_INTERSECT_OVERLAP_HEURISTIC_FACTOR));
+            // in the case totalDistinct is NaN or 0
+            .or(() -> Estimate.of(StatisticRange.INFINITE_TO_INFINITE_RANGE_INTERSECT_OVERLAP_HEURISTIC_FACTOR));
         }
 
         return Optional.of(lowPercentile)
@@ -145,53 +163,5 @@ public class HistogramCalculator
                         .map(Estimate::of)
                         .orElseGet(() -> Estimate.of(1.0)))
                 .orElse(highPercentile);
-    }
-
-    /**
-     * Calculates the percent of overlap that occurs on the {@code source} parameter by the
-     * {@code range} parameter based purely on value bounds.
-     * <br>
-     * For example: [0,1] overlaps [0, 10] from 0 --> 1 on a number line, representing 10% of the
-     * source range. Thus, the value returned here would be 10%.
-     * <br>
-     * This function is similar to
-     * {@link HistogramCalculator#calculateFilterFactor(StatisticRange, ConnectorHistogram, Estimate)}
-     * except that it does not return heuristics and only considers range values to calculate the
-     * overlapping proportion of the ranges.
-     */
-    public static Estimate calculateRangeOverlap(StatisticRange range, ConnectorHistogram source)
-    {
-        Estimate lowValue = source.inverseCumulativeProbability(0.0);
-        Estimate highValue = source.inverseCumulativeProbability(1.0);
-
-        if ((!lowValue.isUnknown() && range.getHigh() <= lowValue.getValue()) ||
-                (!highValue.isUnknown() && range.getLow() >= highValue.getValue())) {
-            return Estimate.of(0.0);
-        }
-
-        // return unknown if either bound is NaN as {@link Estimate} will throw
-        // an error if we create a value as NaN. Also, use StatisticRange#length
-        // rather than StatisticRange#isEmpty because this will return NaN even
-        // if only one of the bounds is NaN.
-        if (isNaN(range.length())) {
-            return Estimate.unknown();
-        }
-
-        Estimate sourceLength = highValue.flatMap(high -> lowValue.map(low -> high - low));
-        Estimate overlapLow = lowValue.map(low -> max(range.getLow(), low));
-        Estimate overlapHigh = highValue.map(high -> min(range.getHigh(), high));
-        Estimate overlapLength = overlapHigh.flatMap(high -> overlapLow.map(low -> high - low));
-        return overlapLength.flatMap(overlap -> {
-            if (overlap < 0) {
-                return Estimate.of(0.0);
-            }
-            return sourceLength.map(srcLength -> {
-                // in the case of srcLength representing a single-value domain
-                if (overlap == 0.0 && srcLength == 0.0) {
-                    return 1.0;
-                }
-                return overlap / srcLength;
-            });
-        });
     }
 }

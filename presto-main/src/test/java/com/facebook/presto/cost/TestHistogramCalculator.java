@@ -19,7 +19,6 @@ import com.facebook.presto.spi.statistics.Estimate;
 import org.testng.annotations.Test;
 
 import static com.facebook.presto.cost.HistogramCalculator.calculateFilterFactor;
-import static com.facebook.presto.cost.HistogramCalculator.calculateRangeOverlap;
 import static java.lang.Double.NEGATIVE_INFINITY;
 import static java.lang.Double.NaN;
 import static java.lang.Double.POSITIVE_INFINITY;
@@ -67,61 +66,9 @@ public class TestHistogramCalculator
                 domainConstrained(unboundedRange(5.0), uniformHist(unboundedRange(7.0))), 5.0);
     }
 
-    @Test
-    public void testCalculateOverlapPercent()
-    {
-        // left edge over hist range
-        assertRangeOverlap(Estimate.of(0.0), range(-10, -5), uniformHist(range(0, 10)));
-        assertRangeOverlap(Estimate.of(0.0), range(-10, 0), uniformHist(range(0, 10)));
-        assertRangeOverlap(Estimate.of(0.1), range(-5, 1), uniformHist(range(0, 10)));
-        assertRangeOverlap(Estimate.of(0.1), range(-4, 1), uniformHist(range(0, 10)));
-
-        // right edge over hist range
-        assertRangeOverlap(Estimate.of(0.0), range(11, 15), uniformHist(range(0, 10)));
-        assertRangeOverlap(Estimate.of(0.0), range(10, 15), uniformHist(range(0, 10)));
-        assertRangeOverlap(Estimate.of(0.1), range(9, 15), uniformHist(range(0, 10)));
-        assertRangeOverlap(Estimate.of(0.1), range(9, 14), uniformHist(range(0, 10)));
-
-        // single edge within, other edge on outer limit
-        assertRangeOverlap(Estimate.of(0.5), range(5, 10), uniformHist(range(0, 10)));
-        assertRangeOverlap(Estimate.of(0.5), range(0, 5), uniformHist(range(0, 10)));
-
-        // infinite ranges
-        assertRangeOverlap(Estimate.of(1.0), range(NEGATIVE_INFINITY, POSITIVE_INFINITY), uniformHist(range(0, 10)));
-        assertRangeOverlap(Estimate.of(0.5), range(5, POSITIVE_INFINITY), uniformHist(range(0, 10)));
-        assertRangeOverlap(Estimate.of(0.5), range(NEGATIVE_INFINITY, 5), uniformHist(range(0, 10)));
-
-        // single value -- since it's not a range, the overlap should be 0%
-        assertRangeOverlap(Estimate.of(0.0), range(5, 5), uniformHist(range(0, 10)));
-        assertRangeOverlap(Estimate.of(0.0), range(0, 0), uniformHist(range(0, 10)));
-        assertRangeOverlap(Estimate.of(0.0), range(10, 10), uniformHist(range(0, 10)));
-
-        // "common" case
-        assertRangeOverlap(Estimate.of(0.3), range(2, 5), uniformHist(range(0, 10)));
-
-        // cases where histogram has unbounded range
-        // -inf
-        assertRangeOverlap(Estimate.unknown(), range(0, 10), uniformHist(range(NEGATIVE_INFINITY, 10)));
-        assertRangeOverlap(Estimate.unknown(), range(9, 10), uniformHist(range(NEGATIVE_INFINITY, 10)));
-        assertRangeOverlap(Estimate.of(0.0), range(10, 10), uniformHist(range(NEGATIVE_INFINITY, 10)));
-        assertRangeOverlap(Estimate.of(0.0), range(10, 12), uniformHist(range(NEGATIVE_INFINITY, 10)));
-        assertRangeOverlap(Estimate.of(0.0), range(11, 12), uniformHist(range(NEGATIVE_INFINITY, 10)));
-        // +inf
-        assertRangeOverlap(Estimate.unknown(), range(0, 10), uniformHist(range(0, POSITIVE_INFINITY)));
-        assertRangeOverlap(Estimate.unknown(), range(0, 1), uniformHist(range(0, POSITIVE_INFINITY)));
-        assertRangeOverlap(Estimate.of(0.0), range(-10, 0), uniformHist(range(0, POSITIVE_INFINITY)));
-        assertRangeOverlap(Estimate.of(0.0), range(-12, -10), uniformHist(range(0, POSITIVE_INFINITY)));
-        assertRangeOverlap(Estimate.of(0.0), range(-12, -11), uniformHist(range(0, POSITIVE_INFINITY)));
-    }
-
     private static StatisticRange range(double low, double high, double distinctValues)
     {
         return new StatisticRange(low, high, distinctValues);
-    }
-
-    private static StatisticRange range(double low, double high)
-    {
-        return new StatisticRange(low, high, NaN);
     }
 
     private static StatisticRange unboundedRange(double distinctValues)
@@ -132,13 +79,8 @@ public class TestHistogramCalculator
     private static void assertFilterFactor(Estimate expected, StatisticRange range, ConnectorHistogram histogram, double totalDistinctValues)
     {
         assertEquals(
-                calculateFilterFactor(range, histogram, Estimate.estimateFromDouble(totalDistinctValues)),
+                calculateFilterFactor(range, histogram, Estimate.estimateFromDouble(totalDistinctValues), true),
                 expected);
-    }
-
-    private static void assertRangeOverlap(Estimate expected, StatisticRange range, ConnectorHistogram histogram)
-    {
-        assertEquals(calculateRangeOverlap(range, histogram), expected);
     }
 
     private static ConnectorHistogram uniformHist(StatisticRange range)
@@ -153,6 +95,6 @@ public class TestHistogramCalculator
 
     private static ConnectorHistogram domainConstrained(StatisticRange range, ConnectorHistogram source)
     {
-        return new DomainConstrainedHistogram(range, source);
+        return DisjointRangeDomainHistogram.addDisjunction(source, range);
     }
 }

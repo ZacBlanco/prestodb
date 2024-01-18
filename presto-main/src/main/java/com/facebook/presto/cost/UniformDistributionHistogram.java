@@ -20,6 +20,7 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import static com.google.common.base.MoreObjects.toStringHelper;
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Verify.verify;
 import static java.lang.Double.isInfinite;
 import static java.lang.Double.isNaN;
@@ -88,7 +89,7 @@ public class UniformDistributionHistogram
     @Override
     public Estimate inverseCumulativeProbability(double percentile)
     {
-        verify(percentile >= 0.0 && percentile <= 1.0, "percentile must be in [0.0, 1.0]");
+        checkArgument(percentile >= 0.0 && percentile <= 1.0, "percentile must be in [0.0, 1.0]: " + percentile);
         if (isNaN(lowValue) ||
                 isNaN(highValue)) {
             return Estimate.unknown();

@@ -15,7 +15,6 @@
 package com.facebook.presto.cost;
 
 import com.facebook.presto.spi.statistics.ConnectorHistogram;
-import com.google.common.base.VerifyException;
 import org.apache.commons.math3.distribution.RealDistribution;
 import org.testng.annotations.Test;
 
@@ -31,14 +30,16 @@ public abstract class TestHistogram
 
     abstract RealDistribution getDistribution();
 
+    abstract double getDistinctValues();
+
     @Test
-    public void testValueAtPercentile()
+    public void testInverseCumulativeProbability()
     {
         ConnectorHistogram hist = createHistogram();
         RealDistribution dist = getDistribution();
-        assertThrows(VerifyException.class, () -> hist.inverseCumulativeProbability(Double.NaN));
-        assertThrows(VerifyException.class, () -> hist.inverseCumulativeProbability(-1.0));
-        assertThrows(VerifyException.class, () -> hist.inverseCumulativeProbability(2.0));
+        assertThrows(IllegalArgumentException.class, () -> hist.inverseCumulativeProbability(Double.NaN));
+        assertThrows(IllegalArgumentException.class, () -> hist.inverseCumulativeProbability(-1.0));
+        assertThrows(IllegalArgumentException.class, () -> hist.inverseCumulativeProbability(2.0));
         assertEquals(hist.inverseCumulativeProbability(0.0).getValue(), dist.getSupportLowerBound(), .001);
         assertEquals(hist.inverseCumulativeProbability(0.25).getValue(), dist.inverseCumulativeProbability(0.25), .001);
         assertEquals(hist.inverseCumulativeProbability(0.5).getValue(), dist.getNumericalMean(), .001);
@@ -46,7 +47,7 @@ public abstract class TestHistogram
     }
 
     @Test
-    public void testPercentileAtValue()
+    public void testCumulativeProbability()
     {
         ConnectorHistogram hist = createHistogram();
         RealDistribution dist = getDistribution();
@@ -63,18 +64,15 @@ public abstract class TestHistogram
         assertEquals(hist.cumulativeProbability(dist.getSupportUpperBound(), true).getValue(), 1.0, .001);
         assertEquals(hist.cumulativeProbability(dist.getNumericalMean(), true).getValue(), 0.5, .001);
         for (int i = 0; i < 10; i++) {
-            assertEquals(hist.cumulativeProbability(dist.inverseCumulativeProbability(0.1 * i), true).getValue(), dist.cumulativeProbability(0.1 * i), .001);
+            assertEquals(hist.cumulativeProbability(dist.inverseCumulativeProbability(0.1 * i), true).getValue(), dist.cumulativeProbability(dist.inverseCumulativeProbability(0.1 * i)), .001);
         }
     }
 
     @Test
     public void testInclusiveExclusive()
     {
-        int ndvs = 100;
+        double ndvs = getDistinctValues();
         ConnectorHistogram hist = createHistogram();
-
-        double value = hist.inverseCumulativeProbability(0.00).getValue();
-        assertEquals(hist.cumulativeProbability(value, false).getValue(), 0.0, .0000001);
         // test maximums
         assertEquals(hist.cumulativeProbability(hist.inverseCumulativeProbability(1.0).getValue(), false).getValue(), 1.0 - (1.0 / ndvs), .0001);
         assertEquals(hist.cumulativeProbability(hist.inverseCumulativeProbability(1.0).getValue(), true).getValue(), 1.0, .0001);
