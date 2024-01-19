@@ -267,9 +267,9 @@ public abstract class AbstractTestNativeGeneralQueries
             assertUpdate(String.format("ANALYZE %s", tmpTableName), 7);
             assertQuery(String.format("SHOW STATS for %s", tmpTableName),
                     "SELECT * FROM (VALUES" +
-                            "('c0', NULL,4.0 , 0.2857142857142857, NULL, '-542392.89', '1000000.12')," +
-                            "('c1', NULL,4.0 , 0.2857142857142857, NULL,  '-6.72398239210929E12', '2.823982323232357E13')," +
-                            "(NULL, NULL, NULL, NULL, 7.0, NULL, NULL))");
+                            "('c0', NULL,4.0 , 0.2857142857142857, NULL, '-542392.89', '1000000.12', NULL)," +
+                            "('c1', NULL,4.0 , 0.2857142857142857, NULL,  '-6.72398239210929E12', '2.823982323232357E13', NULL)," +
+                            "(NULL, NULL, NULL, NULL, 7.0, NULL, NULL, NULL))");
         }
         finally {
             dropTableIfExists(tmpTableName);
