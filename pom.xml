@@ -130,6 +130,7 @@
         <module>presto-testing-docker</module>
         <module>presto-mysql</module>
         <module>presto-oracle</module>
+        <module>presto-oxidized</module>
         <module>presto-postgresql</module>
         <module>presto-prometheus</module>
         <module>presto-redshift</module>
