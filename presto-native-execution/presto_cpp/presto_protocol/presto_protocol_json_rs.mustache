@@ -1,0 +1,159 @@
+use serde::Serialize;
+use serde::Deserialize;
+use uuid::Uuid;
+
+type Integer = i32;
+type Double = f64;
+type Long = i64;
+type Short = i16;
+type Map<K, V> = std::collections::HashMap<K, V>;
+type List<T> = Vec<T>;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct Type {}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct RowExpression {}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct PlanNodeId();
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct ConnectorId();
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct TransactionId;
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct ConnectorTransactionHandle;
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct ConnectorInsertTableHandle;
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct ConnectorPartitioningHandle;
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct TaskId;
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct ConnectorTableHandle;
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct ConnectorOutputTableHandle;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct ConnectorMetadataUpdateHandle;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct ColumnHandle;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct TimeZoneKey;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct Locale;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct SqlFunctinoId;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct ConnectorTableLayoutHandle;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct FunctionHandle;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct PlanNode;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct ConnectorSplit;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct Lifespan;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct OutputBufferId;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct QueryId;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct MemoryPoolId;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct DataSize;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct Duration;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct ValueSet;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct HiveType;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct TypeSignature;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct ColumnType;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct Subfield;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct URI;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct HostAddress;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct PlanFragmentId;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct QualifiedObjectName;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct SqlFunctionId;
+
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct TupleDomain<T>;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct Block;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct HivePageSinkMetadata;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct HiveStorageFormat;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct ExecutionWriterTarget;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct WriterTarget;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct OperatorInfo;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct RuntimeStats;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct DateTime;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct SplitWeight;
+
+{{#.}}
+{{#struct}}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct {{class_name}} {
+    {{#super}}super: {{&super_class}}{{/super}}
+    {{#fields}}
+    {{&field_name}}: {{&field_text}},
+    {{/fields}}
+}
+{{/struct}}
+{{#enum}}
+#[derive(Clone Debug, Serialize, Deserialize)]
+pub enum {{class_name}} {
+    {{#elements}}
+    {{&element}},
+    {{/elements}}
+}
+{{/enum}}
+{{/.}}
