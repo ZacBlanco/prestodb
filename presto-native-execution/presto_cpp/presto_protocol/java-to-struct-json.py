@@ -16,6 +16,7 @@ import argparse
 import json
 import os
 import sys
+import pathlib
 from collections import defaultdict
 
 import re
@@ -23,7 +24,8 @@ import util
 from topological import topological
 
 
-PRESTO_HOME = os.environ.get("PRESTO_HOME", os.environ.get("HOME") + "/presto")
+PRESTO_HOME = pathlib.Path(__file__).resolve().parents[3].absolute()
+# os.environ.get("PRESTO_HOME", os.environ.get("HOME") + "/presto")
 IGNORED_TYPES = {
     "byte",
     "Integer",
@@ -73,6 +75,31 @@ language = {
             r"Map<(.*)>": {"replace": r"map<\1>", "flag": {"repeated": True}},
         }
     },
+    "rs": {
+            "TypeMap": {
+                r"Optional<int\[\]>": "Option<Vec<i32>>",
+                r"Optional<byte\[\]>": "Option<Vec<u8>>",
+                r"int\[\]": "Vec<int>",
+                r"byte\[\]": "Vec<u8>",
+                "OptionalInt": "Option<i32>",
+                "boolean": "bool",
+                r"^long$": "i64",
+                r"^double$": "f64",
+                r"^int$": "i32",
+                "UUID": "Uuid",
+                "List<byte>": "Vec<u8>",
+                r"Set<(.*)>": r"std::collections::HashSet<\1>",
+                r"List<(.*)>": r"Vec<\1>",
+                r"Optional<(.*)>": r"Option<\1>",
+                r"Map<(.*)>": r"std::collections::HashMap<\1>",
+                r"ExchangeNode.Type": "ExchangeNodeType",
+                r"JoinNode.Type": "JoinNodeType",
+                r"JoinNode.EquiJoinClause": "EquiJoinClause",
+                # variable name mappings
+                "type": "prestoType",
+                "self": "selfVar"
+            }
+        },
 }
 
 
@@ -112,10 +139,11 @@ def add_field(
                 != 0
             ):
                 field_local = False
-
+    field_name = field_name
     for key, value in lang.items():
         if type(value) == str:
             field_text = re.sub(key, value, field_text)
+            field_name = re.sub(key, value, field_name)
         else:
             field_text, n = re.subn(key, value["replace"], field_text)
             if n > 0:
@@ -189,6 +217,7 @@ def special(filepath, current_class, key, classes, depends):
 
 def process_file(filepath, config, lang, subclasses, classes, depends):
     filename = util.get_filename(filepath)
+    # print(f'filepath: {filepath}, filename: {filename}')
 
     if filepath.endswith(".hpp.inc"):
         special(filepath, filename[: -len(".hpp.inc")], "hinc", classes, depends)

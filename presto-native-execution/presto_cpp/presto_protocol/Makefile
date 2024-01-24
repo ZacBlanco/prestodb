@@ -51,8 +51,28 @@ presto_protocol-json:
 	./java-to-struct-json.py --config connector/iceberg/presto_protocol_iceberg.yml connector/iceberg/special/*.inc -j | jq . > connector/iceberg/presto_protocol_iceberg.json
 	./java-to-struct-json.py --config connector/tpch/presto_protocol_tpch.yml connector/tpch/special/*.inc -j | jq . > connector/tpch/presto_protocol_tpch.json
 
+presto_protocol-json-rs:
+	# ./java-to-struct-json.py -l rs special/*.java special/*.inc -j | jq . > presto_protocol_rs.json
+	./java-to-struct-json.py -l rs --config core/presto_protocol_core.yml core/special/*.java core/special/*.inc -j | jq . > core/presto_protocol_core_rs.json
+	./java-to-struct-json.py -l rs --config connector/hive/presto_protocol_hive.yml connector/hive/special/*.inc -j | jq . > connector/hive/presto_protocol_hive_rs.json
+	./java-to-struct-json.py -l rs --config connector/iceberg/presto_protocol_iceberg.yml connector/iceberg/special/*.inc -j | jq . > connector/iceberg/presto_protocol_iceberg_rs.json
+	./java-to-struct-json.py -l rs --config connector/tpch/presto_protocol_tpch.yml connector/tpch/special/*.inc -j | jq . > connector/tpch/presto_protocol_tpch_rs.json
+
 presto_protocol.proto: presto_protocol-json
 	pystache presto_protocol-protobuf.mustache core/presto_protocol_core.json > core/presto_protocol_core.proto
 	pystache presto_protocol-protobuf.mustache connector/hive/presto_protocol_hive.json > connector/hive/presto_protocol_hive.proto
 	pystache presto_protocol-protobuf.mustache connector/iceberg/presto_protocol_iceberg.json > connector/iceberg/presto_protocol_iceberg.proto
 	pystache presto_protocol-protobuf.mustache connector/tpch/presto_protocol_tpch.json > connector/tpch/presto_protocol_tpch.proto
+
+presto_protocol.rs: presto_protocol-json-rs
+	# core
+	chevron -d core/presto_protocol_core_rs.json core/presto_protocol_json_rs.mustache > core/presto_protocol.rs
+
+	# hive
+	chevron -d connector/hive/presto_protocol_hive_rs.json connector/hive/presto_protocol_json_rs.mustache > connector/hive/presto_protocol.rs
+	# iceberg
+	chevron -d connector/iceberg/presto_protocol_iceberg_rs.json connector/iceberg/presto_protocol_json_rs.mustache > connector/iceberg/presto_protocol.rs
+	# tpch
+	chevron -d connector/tpch/presto_protocol_tpch_rs.json connector/tpch/presto_protocol_json_rs.mustache > connector/tpch/presto_protocol.rs
+	mkdir -p ../../../presto-oxidized/prestox/src
+	cp -r **/presto_protocol*.rs ../../../presto-oxidized/prestox/src/

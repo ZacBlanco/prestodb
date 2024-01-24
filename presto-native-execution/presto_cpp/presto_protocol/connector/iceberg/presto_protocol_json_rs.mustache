@@ -1,0 +1,30 @@
+use serde::Serialize;
+use serde::Deserialize;
+use uuid::Uuid;
+
+type Integer = i32;
+type Double = f64;
+type Long = i64;
+type Short = i16;
+type Map<K, V> = std::collections::HashMap<K, V>;
+type List<T> = Vec<T>;
+
+{{#.}}
+{{#struct}}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct {{class_name}} {
+    {{#super}}super: {{&super_class}}{{/super}}
+    {{#fields}}
+    {{&field_name}}: {{&field_text}},
+    {{/fields}}
+}
+{{/struct}}
+{{#enum}}
+#[derive(Clone Debug, Serialize, Deserialize)]
+pub enum {{class_name}} {
+    {{#elements}}
+    {{&element}},
+    {{/elements}}
+}
+{{/enum}}
+{{/.}}
