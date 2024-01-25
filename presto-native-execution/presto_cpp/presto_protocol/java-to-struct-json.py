@@ -38,6 +38,7 @@ IGNORED_TYPES = {
     "Set",
 }
 
+# noinspection PyInterpreter
 language = {
     "cpp": {
         "TypeMap": {
@@ -95,7 +96,21 @@ language = {
                 r"JoinNode.EquiJoinClause": "EquiJoinClause",
                 # variable name mappings
                 "type": "prestoType",
-                "self": "selfVar"
+                "self": "selfVar",
+                "ExecutionFailureInfo": "Option<Box<ExecutionFailureInfo>>"
+            },
+            "extraDerives": {
+                "VariableReferenceExpression": ['Hash', "Eq", "PartialEq"],
+                "SqlFunctionId": ['Hash', "Eq", "PartialEq"],
+                "SourceLocation": ['Hash', "Eq", "PartialEq"],
+                "HiveColumnHandle": ['Hash', "Eq", "PartialEq"],
+                "CallExpression": ['Hash', "Eq", "PartialEq"],
+                "Aggregation": ['Hash', "Eq", "PartialEq"],
+                "OrderingScheme": ['Hash', "Eq", "PartialEq"],
+                "ScheduledSplit": ['Hash', "Eq", "PartialEq"],
+                "Split": ['Hash', "Eq", "PartialEq"],
+                "ValueEntry": ['Hash', "Eq", "PartialEq"],
+                "SplitContext": ['Hash', "Eq", "PartialEq"],
             }
         },
 }
@@ -118,6 +133,7 @@ def preprocess_file(filename):
 def add_field(
     current_class, filename, field_name, field_type, config, lang, classes, depends
 ):
+    typemap = lang['TypeMap']
     if filename in config.EnumMap and field_type in config.EnumMap[filename]:
         field_type = config.EnumMap[filename][field_type]
 
@@ -134,7 +150,7 @@ def add_field(
             ):
                 field_local = False
     field_name = field_name
-    for key, value in lang.items():
+    for key, value in typemap.items():
         if type(value) == str:
             field_text = re.sub(key, value, field_text)
             field_name = re.sub(key, value, field_name)
@@ -300,6 +316,11 @@ def process_file(filepath, config, lang, subclasses, classes, depends):
             add_field(
                 current_class, fileroot, name, type, config, lang, classes, depends
             )
+            extra_derives = ''
+            for key, value in lang['extraDerives'].items():
+                if re.match(current_class, key):
+                    extra_derives = ", " + ", ".join(value)
+                    classes[current_class].extraDerives = extra_derives
 
         match = re.match(r" *{ *", line)
         if json and match:
@@ -340,7 +361,7 @@ def main():
     args = parse_args()
     config = util.load_yaml(args.config)
     files = util.input_files(args.files)
-    lang = language.get(args.lang, None)["TypeMap"]
+    lang = language.get(args.lang, None)
 
     files.extend([f"{PRESTO_HOME}/{file}" for file in config.JavaClasses])
 
