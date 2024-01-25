@@ -1,6 +1,13 @@
+#![allow(non_camel_case_types)]
+#![allow(unused)]
+#![allow(non_snake_case)]
+
+
 use serde::Serialize;
 use serde::Deserialize;
+use serde::de::DeserializeOwned;
 use uuid::Uuid;
+use core::hash::Hash;
 
 type Integer = i32;
 type Double = f64;
@@ -9,147 +16,154 @@ type Short = i16;
 type Map<K, V> = std::collections::HashMap<K, V>;
 type List<T> = Vec<T>;
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct Type {}
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct RowExpression {}
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct PlanNodeId();
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct ConnectorId();
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct TransactionId;
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct ConnectorTransactionHandle;
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct ConnectorInsertTableHandle;
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct ConnectorPartitioningHandle;
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct TaskId;
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct ConnectorTableHandle;
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct ConnectorOutputTableHandle;
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Type;
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RowExpression;
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlanNodeId;
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConnectorId;
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TransactionId;
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConnectorTransactionHandle;
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConnectorInsertTableHandle;
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConnectorPartitioningHandle;
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TaskId;
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConnectorTableHandle;
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConnectorOutputTableHandle;
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConnectorMetadataUpdateHandle;
+
+#[derive(Clone, Debug, PartialOrd, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct ColumnHandle;
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TimeZoneKey;
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Locale;
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SqlFunctinoId;
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConnectorTableLayoutHandle;
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FunctionHandle;
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlanNode;
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConnectorSplit;
+
+#[derive(Clone, Debug, Hash, PartialEq, PartialOrd, Eq, Ord, Serialize, Deserialize)]
+pub struct Lifespan;
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OutputBufferId;
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+pub struct QueryId {
+    id: String,
+}
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MemoryPoolId(pub String);
+
+#[derive(Clone, Debug, Hash, Serialize, Deserialize)]
+pub struct DataSize(pub i64);
+
+#[derive(Clone, Debug, Hash, Serialize, Deserialize)]
+pub struct Duration(pub u128);
+
+#[derive(Clone, Debug, Hash, Serialize, Deserialize)]
+pub struct ValueSet;
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HiveType;
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TypeSignature;
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ColumnType;
+
+#[derive(Clone, Debug, Hash, PartialEq, PartialOrd, Eq, Serialize, Deserialize)]
+pub struct Subfield;
+
+#[derive(Clone, Debug, Hash, Serialize, Deserialize)]
+pub struct URI;
+
+#[derive(Clone, Debug, Hash, Serialize, Deserialize)]
+pub struct HostAddress;
+
+#[derive(Clone, Debug, Hash, Serialize, Deserialize)]
+pub struct PlanFragmentId;
+
+#[derive(Clone, Debug, Hash, Serialize, Deserialize)]
+pub struct QualifiedObjectName;
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SqlFunctionId;
+
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-struct ConnectorMetadataUpdateHandle;
+pub struct TupleDomain<T: Eq + Hash> {
+    domains: Option<std::collections::HashMap<T, Domain>>
+}
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct ColumnHandle;
+#[derive(Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize)]
+pub struct Block;
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct TimeZoneKey;
+#[derive(Clone, Debug, Hash, Serialize, Deserialize)]
+pub struct HivePageSinkMetadata;
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct Locale;
+#[derive(Clone, Debug, Hash, Serialize, Deserialize)]
+pub struct HiveStorageFormat;
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct SqlFunctinoId;
+#[derive(Clone, Debug, Hash, Serialize, Deserialize)]
+pub struct ExecutionWriterTarget;
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct ConnectorTableLayoutHandle;
+#[derive(Clone, Debug, Hash, Serialize, Deserialize)]
+pub struct WriterTarget;
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct FunctionHandle;
+#[derive(Clone, Debug, Hash, Serialize, Deserialize)]
+pub struct OperatorInfo;
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct PlanNode;
+#[derive(Clone, Debug, Hash, Serialize, Deserialize)]
+pub struct RuntimeStats;
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct ConnectorSplit;
+#[derive(Clone, Debug, Hash, Serialize, Deserialize)]
+pub struct DateTime;
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct Lifespan;
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct OutputBufferId;
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct QueryId;
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct MemoryPoolId;
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct DataSize;
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct Duration;
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct ValueSet;
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct HiveType;
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct TypeSignature;
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct ColumnType;
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct Subfield;
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct URI;
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct HostAddress;
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct PlanFragmentId;
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct QualifiedObjectName;
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct SqlFunctionId;
-
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct TupleDomain<T>;
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct Block;
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct HivePageSinkMetadata;
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct HiveStorageFormat;
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct ExecutionWriterTarget;
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct WriterTarget;
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct OperatorInfo;
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct RuntimeStats;
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct DateTime;
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct SplitWeight;
+#[derive(Clone, Debug, Hash, Serialize, Deserialize)]
+pub struct SplitWeight;
 
 {{#.}}
 {{#struct}}
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize{{extraDerives}})]
 pub struct {{class_name}} {
-    {{#super}}super: {{&super_class}}{{/super}}
+    {{#super}}
+    #[serde(flatten)]
+    pub super: {{&super_class}}
+    {{/super}}
     {{#fields}}
-    {{&field_name}}: {{&field_text}},
+    pub {{&field_name}}: {{&field_text}},
     {{/fields}}
 }
 {{/struct}}
 {{#enum}}
-#[derive(Clone Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Hash, Eq, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub enum {{class_name}} {
     {{#elements}}
     {{&element}},
