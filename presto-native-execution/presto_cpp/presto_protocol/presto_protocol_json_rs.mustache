@@ -8,6 +8,7 @@ use serde::Deserialize;
 use serde::de::DeserializeOwned;
 use uuid::Uuid;
 use core::hash::Hash;
+use std::fmt::Debug;
 
 type Integer = i32;
 type Double = f64;
@@ -15,25 +16,48 @@ type Long = i64;
 type Short = i16;
 type Map<K, V> = std::collections::HashMap<K, V>;
 type List<T> = Vec<T>;
+type Base64Encoded = String;
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Type;
 #[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RowExpression;
 #[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PlanNodeId;
+pub struct PlanNodeId(pub String);
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)] // serialize and deserialize implemented separately
+pub struct ConnectorId(pub String);
+
 #[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ConnectorId;
-#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
-pub struct TransactionId;
-#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ConnectorTransactionHandle;
+pub struct TransactionId(pub String);
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConnectorTransactionHandle {
+    #[serde(rename = "@type")]
+    pub class: String,
+    #[serde(flatten)]
+    pub content: serde_json::Value,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConnectorSplit {
+    #[serde(rename = "@type")]
+    pub class: String,
+    #[serde(flatten)]
+    pub content: serde_json::Value,
+}
+
 #[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ConnectorInsertTableHandle;
 #[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ConnectorPartitioningHandle;
-#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
-pub struct TaskId;
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+pub struct TaskId {
+    pub query_id: String,
+    pub stage_id: i32,
+    pub stage_execution_id: i32,
+    pub id: i32,
+    pub attempt_number: i32,
+}
 #[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ConnectorTableHandle;
 #[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
@@ -46,10 +70,10 @@ pub struct ConnectorMetadataUpdateHandle;
 pub struct ColumnHandle;
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
-pub struct TimeZoneKey;
+pub struct TimeZoneKey(pub i16);
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Locale;
+pub struct Locale(pub String);
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SqlFunctinoId;
@@ -63,9 +87,6 @@ pub struct FunctionHandle;
 #[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PlanNode;
 
-#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ConnectorSplit;
-
 #[derive(Clone, Debug, Hash, PartialEq, PartialOrd, Eq, Ord, Serialize, Deserialize)]
 pub struct Lifespan;
 
@@ -73,14 +94,12 @@ pub struct Lifespan;
 pub struct OutputBufferId;
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
-pub struct QueryId {
-    id: String,
-}
+pub struct QueryId(pub String);
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MemoryPoolId(pub String);
 
-#[derive(Clone, Debug, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, Hash)]
 pub struct DataSize(pub i64);
 
 #[derive(Clone, Debug, Hash, Serialize, Deserialize)]
@@ -102,13 +121,13 @@ pub struct ColumnType;
 pub struct Subfield;
 
 #[derive(Clone, Debug, Hash, Serialize, Deserialize)]
-pub struct URI;
+pub struct URI(pub String);
 
 #[derive(Clone, Debug, Hash, Serialize, Deserialize)]
 pub struct HostAddress;
 
 #[derive(Clone, Debug, Hash, Serialize, Deserialize)]
-pub struct PlanFragmentId;
+pub struct PlanFragmentId(pub String);
 
 #[derive(Clone, Debug, Hash, Serialize, Deserialize)]
 pub struct QualifiedObjectName;
@@ -140,11 +159,11 @@ pub struct WriterTarget;
 #[derive(Clone, Debug, Hash, Serialize, Deserialize)]
 pub struct OperatorInfo;
 
-#[derive(Clone, Debug, Hash, Serialize, Deserialize)]
-pub struct RuntimeStats;
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+pub struct RuntimeStats(std::collections::HashMap<String, RuntimeMetric>);
 
 #[derive(Clone, Debug, Hash, Serialize, Deserialize)]
-pub struct DateTime;
+pub struct DateTime(pub chrono::DateTime<chrono::Utc>);
 
 #[derive(Clone, Debug, Hash, Serialize, Deserialize)]
 pub struct SplitWeight;
@@ -158,6 +177,7 @@ pub struct {{class_name}} {
     pub super: {{&super_class}}
     {{/super}}
     {{#fields}}
+    {{#edited_field_name}}#[serde(rename = "{{raw_field_name}}")]{{/edited_field_name}}
     pub {{&field_name}}: {{&field_text}},
     {{/fields}}
 }

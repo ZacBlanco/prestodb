@@ -32,5 +32,5 @@ presto_protocol.proto: presto_protocol-json
 	pystache presto_protocol-protobuf.mustache presto_protocol.json > presto_protocol.proto
 
 presto_protocol.rs: presto_protocol-json-rs
-	chevron -d presto_protocol_rs.json presto_protocol_json_rs.mustache > presto_protocol.rs
-	cp presto_protocol.rs ../../../presto-oxidized/src/
+	chevron -d presto_protocol_rs.json presto_protocol_json_rs.mustache > resources.rs
+	cp resources.rs ../../../presto-oxidized/src/protocol/resources.rs
