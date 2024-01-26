@@ -3,36 +3,44 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use dashmap::mapref::one::RefMut;
+use dashmap::DashMap;
+use futures::Future;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
 use crate::err::error::Error;
 use crate::err::error::Error::BackwardsTime;
-use crate::presto_protocol::{
+use crate::protocol::resources::{
     DataSize, Duration, MemoryAllocation, MemoryInfo, MemoryPoolId, MemoryPoolInfo, NodeState,
-    NodeStatus, NodeVersion, QueryId, ServerInfo,
+    NodeStatus, NodeVersion, QueryId, ServerInfo, TaskId, TaskInfo, TaskState, TaskStatus,
+    TaskUpdateRequest,
 };
+use crate::task::SqlTask;
 
 #[derive(Clone, Debug)]
 pub struct AppState {
-    pub node_info: NodeInfo,
+    pub node_info: Arc<NodeInfo>,
     pub node_version: NodeVersion,
     pub node_config: NodeConfig,
     pub node_state: Arc<Mutex<NodeState>>,
     pub memory_manager: Arc<Mutex<LocalMemoryManager>>,
+    pub task_manager: Arc<LocalTaskManager>,
 }
 
 impl AppState {
     pub fn new() -> Result<Self, Error> {
+        let node_info = Arc::new(NodeInfo::new()?);
         Ok(AppState {
-            node_info: NodeInfo::new()?,
+            node_info: node_info.clone(),
             node_version: NodeVersion {
                 version: "<unknown>".to_string(),
             },
             node_config: NodeConfig::default(),
             node_state: Arc::new(Mutex::new(NodeState::ACTIVE)),
             memory_manager: Arc::new(Mutex::new(LocalMemoryManager::default())),
+            task_manager: Arc::new(LocalTaskManager::new(node_info)),
         })
     }
 }
@@ -66,8 +74,8 @@ impl TryFrom<&AppState> for NodeStatus {
                     .map_err(|_| BackwardsTime)?
                     .as_millis(),
             ),
-            externalAddress: "<unknown>".to_string(),
-            internalAddress: "<unknown>".to_string(),
+            externalAddress: "localhost".to_string(),
+            internalAddress: "localhost".to_string(),
             memoryInfo: MemoryInfo {
                 totalNodeMemory: DataSize(0),
                 pools: Default::default(),
@@ -100,16 +108,16 @@ pub struct NodeInfo {
 impl NodeInfo {
     fn new() -> Result<Self, Error> {
         Ok(NodeInfo {
-            environment: "<unknown>".to_string(),
-            pool: "<unknown>".to_string(),
+            environment: "testing".to_string(),
+            pool: "general".to_string(),
             node_id: Uuid::new_v4().to_string(),
-            location: "<unknown>".to_string(),
+            location: "http://localhost:9090".to_string(),
             binary_spec: "<unknown>".to_string(),
             config_spec: "<unknown>".to_string(),
             instance_id: "<unknown>".to_string(),
-            internal_address: "<unknown>".to_string(),
-            external_address: "<unknown>".to_string(),
-            bind_ip: SocketAddr::from((IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080)),
+            internal_address: "localhost:9090".to_string(),
+            external_address: "localhost:9090".to_string(),
+            bind_ip: SocketAddr::from((IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 9090)),
             start_time: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .map_err(|_| BackwardsTime)?
@@ -122,7 +130,7 @@ impl Default for NodeConfig {
     fn default() -> Self {
         NodeConfig {
             is_coordinator: false,
-            coordinator_url: "http://127.0.0.1:49463".to_string(),
+            coordinator_url: "http://127.0.0.1:59117".to_string(),
         }
     }
 }
@@ -189,6 +197,7 @@ pub struct MemoryPoolAssignmentsRequest {
 
 #[derive(Debug)]
 pub struct MemoryPool {
+    #[allow(unused)]
     id: MemoryPoolId,
     max_bytes: i64,
     reserved_bytes: Mutex<i64>,
@@ -277,4 +286,95 @@ impl LocalMemoryManager {
             None => None,
         }
     }
+}
+
+impl TaskId {
+    pub fn to_string(&self) -> String {
+        format!(
+            "{}.{}.{}.{}.{}",
+            self.query_id, self.stage_id, self.stage_execution_id, self.id, self.attempt_number
+        )
+    }
+}
+
+#[derive(Debug)]
+
+pub struct LocalTaskManager {
+    tasks: Arc<DashMap<TaskId, SqlTask>>,
+    node_info: Arc<NodeInfo>,
+}
+
+impl LocalTaskManager {
+    pub fn new(node_info: Arc<NodeInfo>) -> Self {
+        LocalTaskManager {
+            tasks: Arc::new(DashMap::new()),
+            node_info,
+        }
+    }
+
+    fn get_task(&self, id: &TaskId) -> RefMut<'_, TaskId, SqlTask> {
+        self.tasks
+            .entry(id.clone())
+            .or_insert(SqlTask::new(&id, self.node_info.as_ref()))
+    }
+}
+
+impl<'a> TaskManager for LocalTaskManager {
+    fn get_all_task_info(&self, summarize: bool) -> Vec<TaskInfo> {
+        self.tasks
+            .iter()
+            .map(|x| x.value().get_task_info(summarize))
+            .collect::<Vec<_>>()
+    }
+
+    fn get_task_info(&self, id: &TaskId, summarize: bool) -> TaskInfo {
+        self.get_task(&id).get_task_info(summarize)
+    }
+
+    fn get_task_status(&self, id: &TaskId) -> TaskStatus {
+        self.get_task(&id).get_task_status()
+    }
+
+    fn update_task(&self, id: &TaskId, request: TaskUpdateRequest, summarize: bool) -> TaskInfo {
+        self.get_task(id).update(request).get_task_info(summarize)
+    }
+
+    fn get_task_status_future(
+        &self,
+        _task: &TaskId,
+        _current_state: TaskState,
+    ) -> Box<dyn Future<Output = TaskStatus>> {
+        todo!()
+    }
+
+    fn get_task_instance_id(&self, _task: TaskId) -> String {
+        todo!()
+    }
+
+    fn abort_task(&self, task: &TaskId, summarize: bool) -> TaskInfo {
+        let task = self.get_task(task);
+        task.abort();
+        task.get_task_info(summarize)
+    }
+
+    fn cancel_task(&self, task: &TaskId, summarize: bool) -> TaskInfo {
+        let task = self.get_task(task);
+        task.cancel();
+        task.get_task_info(summarize)
+    }
+}
+
+pub trait TaskManager {
+    fn get_all_task_info(&self, summarize: bool) -> Vec<TaskInfo>;
+    fn get_task_info(&self, id: &TaskId, summarize: bool) -> TaskInfo;
+    fn get_task_status(&self, id: &TaskId) -> TaskStatus;
+    fn get_task_status_future(
+        &self,
+        task: &TaskId,
+        current_state: TaskState,
+    ) -> Box<dyn Future<Output = TaskStatus>>;
+    fn update_task(&self, id: &TaskId, request: TaskUpdateRequest, summarize: bool) -> TaskInfo;
+    fn get_task_instance_id(&self, task: TaskId) -> String;
+    fn abort_task(&self, task: &TaskId, summarize: bool) -> TaskInfo;
+    fn cancel_task(&self, task: &TaskId, summarize: bool) -> TaskInfo;
 }

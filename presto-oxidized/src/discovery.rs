@@ -1,7 +1,7 @@
 use reqwest::{Client, Error, Response};
 
 use crate::{
-    presto_protocol::NodeStatus,
+    protocol::resources::NodeStatus,
     resources::{Announcement, NodeInfo},
 };
 
