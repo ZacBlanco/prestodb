@@ -15,12 +15,19 @@ path = "src/main.rs"
 
 [dependencies]
 actix-web = "4.4.1"
+chrono = { version = "0.4.33", features = ["serde"] }
+dashmap = "5.5.3"
 env_logger = "0.11.0"
 futures = "0.3.30"
 log = "0.4.20"
 num_cpus = "1.16.0"
+regex = "1.10.3"
 reqwest = { version = "0.11.23", features = ["json"] }
 serde = { version = "1.0.195", features = ["derive"] }
-serde_json = "1.0.111"
+serde_json = { version = "1.0.111"}
 tokio = { version = "1.35.1", features = ["num_cpus", "parking_lot", "rt-multi-thread", "rt", "time", "mio", "macros"] }
 uuid = { version = "1.7.0", features = ["rng", "serde", "v4"] }
+
+[build-dependencies]
+quote = "1.0.35"
+syn = "2.0.48"
