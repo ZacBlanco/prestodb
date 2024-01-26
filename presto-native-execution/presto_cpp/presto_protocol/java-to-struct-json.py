@@ -76,15 +76,16 @@ language = {
     },
     "rs": {
             "TypeMap": {
-                r"Optional<int\[\]>": "Option<Vec<i32>>",
-                r"Optional<byte\[\]>": "Option<Vec<u8>>",
-                r"int\[\]": "Vec<int>",
-                r"byte\[\]": "Vec<u8>",
+                r"int\[\]": "Vec<i32>",
+                r"byte\[\]": "Base64Encoded",
                 "OptionalInt": "Option<i32>",
                 "boolean": "bool",
                 r"^long$": "i64",
                 r"^double$": "f64",
                 r"^int$": "i32",
+                r"Optional<int\[\]>": "Option<Vec<i32>>",
+                # bytes are serialized to base64 strings in json
+                r"Optional<byte\[\]>": "Option<Base64Encoded>",
                 "UUID": "Uuid",
                 "List<byte>": "Vec<u8>",
                 r"Set<(.*)>": r"std::collections::HashSet<\1>",
@@ -95,9 +96,9 @@ language = {
                 r"JoinNode.Type": "JoinNodeType",
                 r"JoinNode.EquiJoinClause": "EquiJoinClause",
                 # variable name mappings
+                "ExecutionFailureInfo": "Option<Box<ExecutionFailureInfo>>",
                 "type": "prestoType",
                 "self": "selfVar",
-                "ExecutionFailureInfo": "Option<Box<ExecutionFailureInfo>>"
             },
             "extraDerives": {
                 "VariableReferenceExpression": ['Hash', "Eq", "PartialEq"],
@@ -150,10 +151,14 @@ def add_field(
             ):
                 field_local = False
     field_name = field_name
+    edited_field_name = False
+    raw_field_name = field_name
     for key, value in typemap.items():
         if type(value) == str:
             field_text = re.sub(key, value, field_text)
             field_name = re.sub(key, value, field_name)
+            if field_name != raw_field_name:
+                edited_field_name = True
         else:
             field_text, n = re.subn(key, value["replace"], field_text)
             if n > 0:
@@ -162,7 +167,7 @@ def add_field(
 
     classes[current_class].fields.append(
         util.attrdict(
-            field_type=field_type, field_name=field_name, field_text=field_text
+            field_type=field_type, field_name=field_name, field_text=field_text, raw_field_name=raw_field_name, edited_field_name=edited_field_name
         )
     )
     classes[current_class].fields[-1].update(field_flag)
