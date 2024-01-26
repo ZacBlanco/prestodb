@@ -75,4 +75,4 @@ presto_protocol.rs: presto_protocol-json-rs
 	# tpch
 	chevron -d connector/tpch/presto_protocol_tpch_rs.json connector/tpch/presto_protocol_json_rs.mustache > connector/tpch/presto_protocol.rs
 	mkdir -p ../../../presto-oxidized/prestox/src
-	cp -r **/presto_protocol*.rs ../../../presto-oxidized/prestox/src/
+	cp -r **/presto_protocol*.rs ../../../presto-oxidized/prestox/src/protocol/
