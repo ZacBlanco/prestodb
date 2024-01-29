@@ -3,6 +3,7 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use config::Config;
 use dashmap::mapref::one::RefMut;
 use dashmap::DashMap;
 use futures::Future;
@@ -10,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
+use crate::config::DISCOVERY_URI;
 use crate::err::error::Error;
 use crate::err::error::Error::BackwardsTime;
 use crate::protocol::resources::{
@@ -30,14 +32,14 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub fn new() -> Result<Self, Error> {
+    pub fn new(config: &Config) -> Result<Self, Error> {
         let node_info = Arc::new(NodeInfo::new()?);
         Ok(AppState {
             node_info: node_info.clone(),
             node_version: NodeVersion {
                 version: "<unknown>".to_string(),
             },
-            node_config: NodeConfig::default(),
+            node_config: NodeConfig::new(config),
             node_state: Arc::new(Mutex::new(NodeState::ACTIVE)),
             memory_manager: Arc::new(Mutex::new(LocalMemoryManager::default())),
             task_manager: Arc::new(LocalTaskManager::new(node_info)),
@@ -126,11 +128,11 @@ impl NodeInfo {
     }
 }
 
-impl Default for NodeConfig {
-    fn default() -> Self {
+impl NodeConfig {
+    fn new(config: &Config) -> Self {
         NodeConfig {
             is_coordinator: false,
-            coordinator_url: "http://127.0.0.1:59117".to_string(),
+            discovery_uri: DISCOVERY_URI.lookup(config).expect("need a discovery URI"),
         }
     }
 }
@@ -138,7 +140,7 @@ impl Default for NodeConfig {
 #[derive(Clone, Debug)]
 pub struct NodeConfig {
     pub is_coordinator: bool,
-    pub coordinator_url: String,
+    pub discovery_uri: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -298,7 +300,6 @@ impl TaskId {
 }
 
 #[derive(Debug)]
-
 pub struct LocalTaskManager {
     tasks: Arc<DashMap<TaskId, SqlTask>>,
     node_info: Arc<NodeInfo>,

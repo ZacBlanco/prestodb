@@ -1,7 +1,8 @@
 use crate::protocol::resources::{
-    Duration, MemoryPoolId, NodeStatus, ServerInfo, TaskId, TaskUpdateRequest,
+    Duration, MemoryPoolId, NodeStatus, OutputBufferId, ServerInfo, TaskId, TaskUpdateRequest,
 };
 use crate::resources::{AppState, MemoryPoolAssignmentsRequest, TaskManager};
+
 use actix_web::{delete, get, head, post, put, web, Error, HttpResponse};
 use log::{debug, error};
 use serde::{Deserialize, Serialize};
@@ -9,17 +10,25 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 pub fn worker_config(config: &mut web::ServiceConfig) {
     config
+        // memory
         .service(post_memory)
         .service(get_memory_pool)
+        // status API
         .service(get_status)
+        // info api
         .service(get_info)
+        .service(get_coordinator)
         .service(get_state)
         .service(put_state)
-        .service(get_coordinator)
+        // task control plane
         .service(get_task_info)
         .service(get_task_status)
         .service(post_task)
-        .service(delete_task);
+        .service(delete_task)
+        // data plane APIs
+        .service(data_plane_get_buffer_token)
+        .service(data_plane_get_buffer_token_ack)
+        .service(data_plane_delete_buffer_token);
 }
 
 type Response = Result<HttpResponse, Error>;
@@ -119,8 +128,6 @@ async fn post_task(
         debug!("{}", String::from_utf8(request.to_vec()).unwrap());
         return Ok(HttpResponse::InternalServerError()
             .body(format!("failed to deserialize json response {:?}", e)));
-    } else {
-        debug!("Successfully parsed TaskUpdateRequest!");
     }
     let info = state
         .task_manager
@@ -173,17 +180,54 @@ async fn get_tasks(
 
 /// Data Plane Operations
 
+const PRESTO_PAGES_CONTENT_TYPE: &str = "application/X-presto-pages";
+#[allow(unused)]
+const PRESTO_CURRENT_STATE: &str = "X-Presto-Current-State";
+#[allow(unused)]
+const PRESTO_MAX_WAIT: &str = "X-Presto-Max-Wait";
+#[allow(unused)]
+const PRESTO_MAX_SIZE: &str = "X-Presto-Max-Size";
+const PRESTO_TASK_INSTANCE_ID: &str = "X-Presto-Task-Instance-Id";
+const PRESTO_PAGE_TOKEN: &str = "X-Presto-Page-Sequence-Id";
+const PRESTO_PAGE_NEXT_TOKEN: &str = "X-Presto-Page-End-Sequence-Id";
+const PRESTO_BUFFER_COMPLETE: &str = "X-Presto-Buffer-Complete";
+#[allow(unused)]
+const PRESTO_PREFIX_URL: &str = "X-Presto-Prefix-Url";
+
 #[get("/task/async/{task_id}/results/{buffer_id}/{token}")]
-async fn get_buffer_token() -> Response {
-    Ok(HttpResponse::NotImplemented().finish())
+async fn data_plane_get_buffer_token(
+    _state: web::Data<AppState>,
+    params: web::Path<(TaskId, OutputBufferId, i64)>,
+) -> Response {
+    let (_taskid, _buffer, _token) = params.as_ref();
+    match tokio::time::timeout(std::time::Duration::from_secs(1), async {
+        let var_name: Result<(), ()> = Err(());
+        var_name
+    })
+    .await
+    {
+        Ok(result) => match result {
+            Ok(_) => Ok(HttpResponse::Ok()
+                .content_type(PRESTO_PAGES_CONTENT_TYPE)
+                .append_header((PRESTO_TASK_INSTANCE_ID, ""))
+                .append_header((PRESTO_PAGE_TOKEN, ""))
+                .append_header((PRESTO_PAGE_NEXT_TOKEN, ""))
+                .append_header((PRESTO_BUFFER_COMPLETE, ""))
+                .finish()),
+            Err(_) => Ok(HttpResponse::InternalServerError()
+                .json(format!("Failed to retrieve buffer result"))),
+        },
+        Err(e) => Ok(HttpResponse::InternalServerError()
+            .json(format!("Timeout retrieving result after {} ", e))),
+    }
 }
 
 #[get("/task/async/{task_id}/results/{buffer_id}/{token}/acknowledge")]
-async fn get_buffer_token_ack() -> Response {
+async fn data_plane_get_buffer_token_ack() -> Response {
     Ok(HttpResponse::NotImplemented().finish())
 }
 
 #[delete("/task/async/{task_id}/results/{buffer_id}/{token}")]
-async fn delete_buffer_token() -> Response {
+async fn data_plane_delete_buffer_token() -> Response {
     Ok(HttpResponse::NotImplemented().finish())
 }
