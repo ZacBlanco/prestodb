@@ -94,7 +94,7 @@ pub struct SqlTask {
     task_instance_id: TaskInstanceId,
     location: URI,
     node_id: String,
-    task_state_machine: TaskStateMachine,
+    task_state_machine: Arc<TaskStateMachine>,
     output_buffer: OutputBuffer,
     query_context: QueryContext,
     sql_task_execution_factory: SqlTaskExecutionFactory,
@@ -113,7 +113,7 @@ impl SqlTask {
             task_instance_id: TaskInstanceId(Uuid::new_v4()),
             location: create_local_task_location(id, state),
             node_id: state.node_id.clone(),
-            task_state_machine: TaskStateMachine::new(id),
+            task_state_machine: Arc::new(TaskStateMachine::new(id)),
             output_buffer: OutputBuffer,
             query_context: QueryContext,
             sql_task_execution_factory: SqlTaskExecutionFactory,
@@ -173,7 +173,7 @@ impl SqlTask {
     }
 
     pub fn update(&self, _request: TaskUpdateRequest) -> &Self {
-        &self
+        self
     }
 
     pub fn abort(&self) {

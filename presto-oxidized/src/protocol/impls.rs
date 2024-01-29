@@ -2,7 +2,7 @@ use std::hash::Hash;
 
 use super::resources::{
     BufferState, ConnectorId, ConnectorSplit, ConnectorTransactionHandle, DataSize, DateTime,
-    MetadataUpdates, OutputBufferInfo, TaskId, TaskStats,
+    Lifespan, MetadataUpdates, OutputBufferInfo, TaskId, TaskStats,
 };
 use chrono::Utc;
 use regex::Regex;
@@ -216,9 +216,70 @@ impl<'de> Visitor<'de> for DataSizeVisitor {
     }
 }
 
+impl Lifespan {
+    pub fn is_task_wide(&self) -> bool {
+        !self.0 && self.1 == 0
+    }
+
+    pub fn task_wide() -> Self {
+        Lifespan(false, 0)
+    }
+}
+
+impl Serialize for Lifespan {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&match self.is_task_wide() {
+            true => "TaskWide".to_string(),
+            false => format!("Group{}", self.1),
+        })
+    }
+}
+
+impl<'de> Deserialize<'de> for Lifespan {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        deserializer.deserialize_str(LifespanVisitor)
+    }
+}
+
+struct LifespanVisitor;
+
+impl<'de> Visitor<'de> for LifespanVisitor {
+    type Value = Lifespan;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("expected a string starting with 'Group' or 'TaskWide'")
+    }
+
+    fn visit_borrowed_str<E>(self, v: &'de str) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        if v.starts_with("TaskWide") {
+            return Ok(Lifespan::task_wide());
+        }
+
+        match v.strip_prefix("Group") {
+            Some(rest) => rest
+                .parse::<i32>()
+                .map_err(|e| E::custom(e.to_string()))
+                .map(|group| Lifespan(true, group)),
+            None => Err(E::custom(format!(
+                "Looking for string starting with Group or TaskWide: {}",
+                v
+            ))),
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
-    use crate::protocol::resources::{ConnectorId, TaskId};
+    use crate::protocol::resources::{ConnectorId, Lifespan, TaskId};
 
     #[test]
     fn test_task_id_serialization() {
@@ -247,5 +308,23 @@ mod test {
         assert_eq!("\"123\"", serde_json::to_string(&id).unwrap());
         let new_id = serde_json::from_str(&serde_json::to_string(&id).unwrap()).unwrap();
         assert_eq!(id, new_id);
+    }
+
+    #[test]
+    fn test_lifespan_serialization() {
+        let span = Lifespan::task_wide();
+        assert!(span.is_task_wide());
+        assert_eq!("\"TaskWide\"", &serde_json::to_string(&span).unwrap());
+        let span = Lifespan(true, 12);
+        assert!(!span.is_task_wide());
+        assert_eq!("\"Group12\"", &serde_json::to_string(&span).unwrap());
+        assert_eq!(
+            Lifespan::task_wide(),
+            serde_json::from_str(&serde_json::to_string(&Lifespan::task_wide()).unwrap()).unwrap()
+        );
+        assert_eq!(
+            Lifespan(true, 100),
+            serde_json::from_str(&serde_json::to_string(&Lifespan(true, 100)).unwrap()).unwrap()
+        );
     }
 }

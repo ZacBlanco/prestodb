@@ -9,16 +9,22 @@ path = "src/lib.rs"
 
 [[bin]]
 name = "server"
-path = "src/main.rs"
+path = "src/bin/main.rs"
+
+[[bin]]
+name = "config-reference"
+path = "src/bin/config-reference.rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 actix-web = "4.4.1"
 chrono = { version = "0.4.33", features = ["serde"] }
+config = "0.13.4"
 dashmap = "5.5.3"
 env_logger = "0.11.0"
 futures = "0.3.30"
+lazy_static = "1.4.0"
 log = "0.4.20"
 num_cpus = "1.16.0"
 regex = "1.10.3"

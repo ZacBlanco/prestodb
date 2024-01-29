@@ -20,6 +20,38 @@ type Base64Encoded = String;
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Type;
+//#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+// pub enum Type {
+//     Parametric { inner: Box<Type> },
+//     Boolean,
+//     Bigint,
+//     Int,
+//     Char,
+//     Varchar,
+//     DateTime,
+//     Date,
+//     Decimal {scale: u16, precision: u16,},
+//     LongDecimal {scale: u16, precision: u16 },
+//     ShortDecimal {scale: u16, precision: u16,},
+//     Double,
+//     Real,
+//     HyperLogLog { inner: Box<Type> },
+//     Json,
+//     Map { key: Box<Type>, value: Box<Type> },
+//     P4HyperLogLog,
+//     QuantileDigest,
+//     Row { spec: Vec<(String, Box<Type>)> },
+//     #[serde(rename = "time")]
+//     Time,
+//     #[serde(rename = "tinyint")]
+//     TinyInt,
+//     #[serde(rename = "unknown")]
+//     Unknown,
+//     #[serde(rename = "uuid")]
+//     Uuid,
+//     #[serde(rename = "varbinary")]
+//     Varbinary
+// }
 #[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RowExpression;
 #[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
@@ -87,11 +119,11 @@ pub struct FunctionHandle;
 #[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PlanNode;
 
-#[derive(Clone, Debug, Hash, PartialEq, PartialOrd, Eq, Ord, Serialize, Deserialize)]
-pub struct Lifespan;
+#[derive(Clone, Debug, Hash, PartialEq, PartialOrd, Eq, Ord)]
+pub struct Lifespan(pub bool, pub i32);
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
-pub struct OutputBufferId;
+pub struct OutputBufferId(pub i32);
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct QueryId(pub String);
@@ -105,14 +137,34 @@ pub struct DataSize(pub i64);
 #[derive(Clone, Debug, Hash, Serialize, Deserialize)]
 pub struct Duration(pub u128);
 
-#[derive(Clone, Debug, Hash, Serialize, Deserialize)]
-pub struct ValueSet;
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(tag = "@type")]
+pub enum ValueSet {
+    #[serde(rename = "equatable")]
+    Equatable {
+        #[serde(rename = "type")]
+        prestoType: Type,
+        whiteList: bool,
+        entries: std::collections::HashSet<ValueEntry>
+    },
+    #[serde(rename = "sortable")]
+    Sortable {
+        prestoType: Type,
+        ranges: Vec<Range>
+    },
+    #[serde(rename = "allOrNone")]
+    AllOrNone {
+        #[serde(rename = "type")]
+        prestoType: Type,
+        all: bool
+    },
+}
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HiveType;
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
-pub struct TypeSignature;
+pub struct TypeSignature(pub String);
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ColumnType;
