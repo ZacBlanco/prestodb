@@ -61,4 +61,20 @@ public interface ConnectorHistogram
      * @return the value in the distribution corresponding to the percentile
      */
     Estimate inverseCumulativeProbability(double percentile);
+
+    /**
+     * Merge another histogram into this the current histogram and return a new one.
+     * <br>
+     * Some implementations may require that the underlying implementations be the same in order
+     * to merge.
+     *
+     * @param other the other histogram to merge.
+     * @return a copy of the merged histogram
+     * @throws UnsupportedHistogramMergeException if the other histogram can't be merged
+     */
+    default ConnectorHistogram merge(ConnectorHistogram other)
+            throws UnsupportedHistogramMergeException
+    {
+        throw new UnsupportedHistogramMergeException();
+    }
 }

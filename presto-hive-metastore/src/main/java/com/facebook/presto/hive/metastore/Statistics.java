@@ -25,6 +25,8 @@ import com.facebook.presto.spi.PrestoException;
 import com.facebook.presto.spi.statistics.ColumnStatisticMetadata;
 import com.facebook.presto.spi.statistics.ColumnStatisticType;
 import com.facebook.presto.spi.statistics.ComputedStatistics;
+import com.facebook.presto.spi.statistics.ConnectorHistogram;
+import com.facebook.presto.spi.statistics.UnsupportedHistogramMergeException;
 import com.google.common.collect.ImmutableMap;
 import org.joda.time.DateTimeZone;
 
@@ -110,7 +112,24 @@ public final class Statistics
                 reduce(first.getMaxValueSizeInBytes(), second.getMaxValueSizeInBytes(), MAX, true),
                 reduce(first.getTotalSizeInBytes(), second.getTotalSizeInBytes(), ADD, true),
                 reduce(first.getNullsCount(), second.getNullsCount(), ADD, false),
-                reduce(first.getDistinctValuesCount(), second.getDistinctValuesCount(), MAX, false));
+                reduce(first.getDistinctValuesCount(), second.getDistinctValuesCount(), MAX, false),
+                mergeHistograms(first.getHistogram(), second.getHistogram()));
+    }
+
+    private static Optional<ConnectorHistogram> mergeHistograms(Optional<ConnectorHistogram> first, Optional<ConnectorHistogram> second)
+    {
+        Optional<ConnectorHistogram> merged = first.map(hist -> second.flatMap(other -> {
+            try {
+                return Optional.of(hist.merge(other));
+            }
+            catch (UnsupportedHistogramMergeException e) {
+                return Optional.empty();
+            }
+        }).orElse(hist));
+        if (!merged.isPresent()) {
+            return second;
+        }
+        return merged;
     }
 
     private static Optional<IntegerStatistics> mergeIntegerStatistics(Optional<IntegerStatistics> first, Optional<IntegerStatistics> second)

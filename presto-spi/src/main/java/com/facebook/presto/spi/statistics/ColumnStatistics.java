@@ -29,7 +29,6 @@ public final class ColumnStatistics
     private final Estimate distinctValuesCount;
     private final Estimate dataSize;
     private final Optional<DoubleRange> range;
-
     private final Optional<ConnectorHistogram> histogram;
 
     public static ColumnStatistics empty()

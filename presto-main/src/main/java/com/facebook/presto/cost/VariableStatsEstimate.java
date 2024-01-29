@@ -32,8 +32,8 @@ import static java.lang.String.format;
 
 public class VariableStatsEstimate
 {
-    private static final VariableStatsEstimate UNKNOWN = new VariableStatsEstimate(NEGATIVE_INFINITY, POSITIVE_INFINITY, NaN, NaN, NaN);
-    private static final VariableStatsEstimate ZERO = new VariableStatsEstimate(NaN, NaN, 1.0, 0.0, 0.0);
+    private static final VariableStatsEstimate UNKNOWN = new VariableStatsEstimate(NEGATIVE_INFINITY, POSITIVE_INFINITY, NaN, NaN, NaN, null);
+    private static final VariableStatsEstimate ZERO = new VariableStatsEstimate(NaN, NaN, 1.0, 0.0, 0.0, null);
 
     // for now we support only types which map to real domain naturally and keep low/high value as double in stats.
     private final double lowValue;
@@ -179,13 +179,14 @@ public class VariableStatsEstimate
                 Double.compare(averageRowSize, that.averageRowSize) == 0 &&
                 Double.compare(distinctValuesCount, that.distinctValuesCount) == 0 &&
                 Double.compare(lowValue, that.lowValue) == 0 &&
-                Double.compare(highValue, that.highValue) == 0;
+                Double.compare(highValue, that.highValue) == 0 &&
+                histogram != null && histogram.equals(that.histogram);
     }
 
     @Override
     public int hashCode()
     {
-        return Objects.hash(lowValue, highValue, nullsFraction, averageRowSize, distinctValuesCount);
+        return Objects.hash(lowValue, highValue, nullsFraction, averageRowSize, distinctValuesCount, histogram);
     }
 
     @Override

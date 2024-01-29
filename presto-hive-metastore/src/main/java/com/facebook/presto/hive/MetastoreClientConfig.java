@@ -34,7 +34,7 @@ public class MetastoreClientConfig
     private HostAndPort metastoreSocksProxy;
     private Duration metastoreTimeout = new Duration(10, TimeUnit.SECONDS);
     private boolean verifyChecksum = true;
-    private boolean requireHadoopNative = true;
+    private boolean requireHadoopNative;
 
     private Duration metastoreCacheTtl = new Duration(0, TimeUnit.SECONDS);
     private Duration metastoreRefreshInterval = new Duration(0, TimeUnit.SECONDS);

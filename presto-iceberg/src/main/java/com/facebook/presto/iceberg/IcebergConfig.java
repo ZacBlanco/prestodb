@@ -50,6 +50,7 @@ public class IcebergConfig
     private boolean mergeOnReadModeEnabled = true;
     private double statisticSnapshotRecordDifferenceWeight;
     private boolean pushdownFilterEnabled;
+    private boolean useSampleStatistics;
 
     private HiveStatisticsMergeStrategy hiveStatisticsMergeStrategy = HiveStatisticsMergeStrategy.NONE;
     private String fileIOImpl = HadoopFileIO.class.getName();

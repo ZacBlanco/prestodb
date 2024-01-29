@@ -15,6 +15,7 @@ package com.facebook.presto.hive.metastore;
 
 import com.facebook.presto.common.predicate.Domain;
 import com.facebook.presto.common.type.Type;
+import com.facebook.presto.cost.UniformDistributionHistogram;
 import com.facebook.presto.hive.HiveBasicStatistics;
 import com.facebook.presto.hive.HiveBucketProperty;
 import com.facebook.presto.hive.HiveType;
@@ -129,7 +130,8 @@ public class TestRecordingHiveMetastore
                     OptionalLong.of(1234),
                     OptionalLong.of(1235),
                     OptionalLong.of(1),
-                    OptionalLong.of(8))));
+                    OptionalLong.of(8),
+                    Optional.of(new UniformDistributionHistogram(-100, 102)))));
     private static final HivePrivilegeInfo PRIVILEGE_INFO = new HivePrivilegeInfo(HivePrivilege.SELECT, true, new PrestoPrincipal(USER, "grantor"), new PrestoPrincipal(USER, "grantee"));
     private static final RoleGrant ROLE_GRANT = new RoleGrant(new PrestoPrincipal(USER, "grantee"), "role", true);
     private static final PrimaryKeyConstraint<String> TEST_PRIMARY_KEY = new PrimaryKeyConstraint<>("", ImmutableSet.of("column_pk"), true, true);

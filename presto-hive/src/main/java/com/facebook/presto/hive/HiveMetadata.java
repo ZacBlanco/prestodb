@@ -342,6 +342,7 @@ import static com.facebook.presto.spi.TableLayoutFilterCoverage.COVERED;
 import static com.facebook.presto.spi.TableLayoutFilterCoverage.NOT_APPLICABLE;
 import static com.facebook.presto.spi.TableLayoutFilterCoverage.NOT_COVERED;
 import static com.facebook.presto.spi.security.PrincipalType.USER;
+import static com.facebook.presto.spi.statistics.ColumnStatisticType.HISTOGRAM;
 import static com.facebook.presto.spi.statistics.ColumnStatisticType.MAX_VALUE;
 import static com.facebook.presto.spi.statistics.ColumnStatisticType.MAX_VALUE_SIZE_IN_BYTES;
 import static com.facebook.presto.spi.statistics.ColumnStatisticType.MIN_VALUE;
@@ -2146,8 +2147,8 @@ public class HiveMetadata
      * This is required when we are overwriting the partitions by directly writing the new
      * files to the existing directory, where files written by older queries may be present too.
      *
-     * @param  session  the ConnectorSession object
-     * @param  partitionPath the path of the partition from where the older files are to be deleted
+     * @param session the ConnectorSession object
+     * @param partitionPath the path of the partition from where the older files are to be deleted
      */
     private void removeNonCurrentQueryFiles(ConnectorSession session, Path partitionPath)
     {
@@ -3138,7 +3139,14 @@ public class HiveMetadata
     private List<ColumnStatisticMetadata> getColumnStatisticMetadata(String columnName, Set<ColumnStatisticType> statisticTypes)
     {
         return statisticTypes.stream()
-                .map(type -> type.getColumnStatisticMetadata(columnName))
+                .map(type -> {
+                    if (type == HISTOGRAM) {
+                        return type.getColumnStatisticMetadataWithCustomFunction(columnName, "sketch_kll");
+                    }
+                    else {
+                        return type.getColumnStatisticMetadata(columnName);
+                    }
+                })
                 .collect(toImmutableList());
     }
 

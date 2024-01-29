@@ -13,9 +13,11 @@
  */
 package com.facebook.presto.hive.metastore;
 
+import com.facebook.presto.spi.statistics.ConnectorHistogram;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 
 import java.math.BigDecimal;
@@ -46,6 +48,8 @@ public class HiveColumnStatistics
     private final OptionalLong nullsCount;
     private final OptionalLong distinctValuesCount;
 
+    private final Optional<ConnectorHistogram> histogram;
+
     public static HiveColumnStatistics empty()
     {
         return EMPTY;
@@ -61,7 +65,8 @@ public class HiveColumnStatistics
             @JsonProperty("maxValueSizeInBytes") OptionalLong maxValueSizeInBytes,
             @JsonProperty("totalSizeInBytes") OptionalLong totalSizeInBytes,
             @JsonProperty("nullsCount") OptionalLong nullsCount,
-            @JsonProperty("distinctValuesCount") OptionalLong distinctValuesCount)
+            @JsonProperty("distinctValuesCount") OptionalLong distinctValuesCount,
+            @JsonProperty("histogram") Optional<ConnectorHistogram> histogram)
     {
         this.integerStatistics = requireNonNull(integerStatistics, "integerStatistics is null");
         this.doubleStatistics = requireNonNull(doubleStatistics, "doubleStatistics is null");
@@ -72,6 +77,7 @@ public class HiveColumnStatistics
         this.totalSizeInBytes = requireNonNull(totalSizeInBytes, "totalSizeInBytes is null");
         this.nullsCount = requireNonNull(nullsCount, "nullsCount is null");
         this.distinctValuesCount = requireNonNull(distinctValuesCount, "distinctValuesCount is null");
+        this.histogram = requireNonNull(histogram, "histogram is null");
 
         List<String> presentStatistics = new ArrayList<>();
         integerStatistics.ifPresent(s -> presentStatistics.add("integerStatistics"));
@@ -136,6 +142,12 @@ public class HiveColumnStatistics
         return distinctValuesCount;
     }
 
+    @JsonProperty
+    public Optional<ConnectorHistogram> getHistogram()
+    {
+        return histogram;
+    }
+
     @Override
     public boolean equals(Object o)
     {
@@ -154,7 +166,8 @@ public class HiveColumnStatistics
                 Objects.equals(maxValueSizeInBytes, that.maxValueSizeInBytes) &&
                 Objects.equals(totalSizeInBytes, that.totalSizeInBytes) &&
                 Objects.equals(nullsCount, that.nullsCount) &&
-                Objects.equals(distinctValuesCount, that.distinctValuesCount);
+                Objects.equals(distinctValuesCount, that.distinctValuesCount) &&
+                Objects.equals(histogram, that.histogram);
     }
 
     @Override
@@ -169,7 +182,8 @@ public class HiveColumnStatistics
                 maxValueSizeInBytes,
                 totalSizeInBytes,
                 nullsCount,
-                distinctValuesCount);
+                distinctValuesCount,
+                histogram);
     }
 
     @Override
@@ -185,6 +199,7 @@ public class HiveColumnStatistics
                 .add("totalSizeInBytes", totalSizeInBytes)
                 .add("nullsCount", nullsCount)
                 .add("distinctValuesCount", distinctValuesCount)
+                .add("histogram", histogram)
                 .toString();
     }
 
@@ -277,6 +292,8 @@ public class HiveColumnStatistics
         private OptionalLong nullsCount = OptionalLong.empty();
         private OptionalLong distinctValuesCount = OptionalLong.empty();
 
+        private Optional<ConnectorHistogram> histogram = Optional.empty();
+
         private Builder() {}
 
         private Builder(HiveColumnStatistics other)
@@ -290,6 +307,7 @@ public class HiveColumnStatistics
             this.totalSizeInBytes = other.getTotalSizeInBytes();
             this.nullsCount = other.getNullsCount();
             this.distinctValuesCount = other.getDistinctValuesCount();
+            this.histogram = other.getHistogram();
         }
 
         public Builder setIntegerStatistics(Optional<IntegerStatistics> integerStatistics)
@@ -400,6 +418,12 @@ public class HiveColumnStatistics
             return this;
         }
 
+        public Builder setHistogram(@Nullable ConnectorHistogram histogram)
+        {
+            this.histogram = Optional.ofNullable(histogram);
+            return this;
+        }
+
         public HiveColumnStatistics build()
         {
             return new HiveColumnStatistics(
@@ -411,7 +435,8 @@ public class HiveColumnStatistics
                     maxValueSizeInBytes,
                     totalSizeInBytes,
                     nullsCount,
-                    distinctValuesCount);
+                    distinctValuesCount,
+                    histogram);
         }
     }
 }
