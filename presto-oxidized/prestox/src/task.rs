@@ -2,12 +2,14 @@
 //!
 
 use std::{
-    collections::HashSet,
+    collections::{BTreeSet},
     sync::{
         atomic::{AtomicBool, AtomicI64},
         Arc,
     },
 };
+
+use ordered_float::OrderedFloat;
 
 use chrono::Utc;
 use log::debug;
@@ -136,11 +138,11 @@ impl SqlTask {
                 .fetch_add(1, std::sync::atomic::Ordering::Acquire) as i64,
             state: self.task_state_machine.get_state(),
             selfVar: self.location.clone(),
-            completedDriverGroups: HashSet::new(),
+            completedDriverGroups: BTreeSet::new(),
             failures: vec![],
             queuedPartitionedDrivers: 0,
             runningPartitionedDrivers: 0,
-            outputBufferUtilization: 0.0,
+            outputBufferUtilization: OrderedFloat(0.0),
             outputBufferOverutilized: false,
             physicalWrittenDataSizeInBytes: 0,
             memoryReservationInBytes: 1024 * 1024 * 128,
@@ -164,7 +166,7 @@ impl SqlTask {
             taskStatus: self.get_task_status(),
             lastHeartbeat: { self.last_heartbeat.read().unwrap().clone() },
             outputBuffers: OutputBufferInfo::new(),
-            noMoreSplits: HashSet::new(),
+            noMoreSplits: BTreeSet::new(),
             stats: Default::default(),
             needsPlan: true,
             metadataUpdates: Default::default(),

@@ -1,26 +1,25 @@
-use std::hash::Hash;
+use std::{collections::BTreeMap};
 
 use super::resources::{
-    BufferState, ConnectorId, ConnectorSplit, ConnectorTransactionHandle, DataSize, DateTime,
-    Lifespan, MetadataUpdates, OutputBufferInfo, TaskId, TaskStats,
+    BufferState, ConnectorId, DataSize, DateTime, Lifespan, MetadataUpdates, OutputBufferInfo, RuntimeStats, TaskId, TaskStats
 };
 use chrono::Utc;
 use regex::Regex;
 use serde::{de::Visitor, Deserialize, Serialize};
 
-impl Hash for ConnectorTransactionHandle {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.class.hash(state);
-        self.content.to_string().hash(state);
-    }
-}
+// impl Hash for ConnectorTransactionHandle {
+//     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+//         self.class.hash(state);
+//         self.content.to_string().hash(state);
+//     }
+// }
 
-impl Hash for ConnectorSplit {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.class.hash(state);
-        self.content.to_string().hash(state);
-    }
-}
+// impl Hash for ConnectorSplit {
+//     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+//         self.class.hash(state);
+//         self.content.to_string().hash(state);
+//     }
+// }
 
 impl From<&TaskId> for String {
     fn from(value: &TaskId) -> Self {
@@ -157,7 +156,7 @@ impl Default for TaskStats {
             fullGcCount: Default::default(),
             fullGcTimeInMillis: Default::default(),
             pipelines: Default::default(),
-            runtimeStats: Default::default(),
+            runtimeStats: RuntimeStats(BTreeMap::new()),
         }
     }
 }

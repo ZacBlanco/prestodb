@@ -1,0 +1,135 @@
+{
+    "id": "1",
+    "root": {
+        "@type": "com.facebook.presto.sql.planner.plan.ExchangeNode",
+        "id": "338",
+        "type": "GATHER",
+        "scope": "LOCAL",
+        "partitioningScheme": {
+            "partitioning": {
+                "handle": {
+                    "connectorHandle": {
+                        "@type": "$remote",
+                        "partitioning": "FIXED",
+                        "function": "UNKNOWN"
+                    }
+                },
+                "arguments": []
+            },
+            "outputLayout": [
+                {
+                    "@type": "variable",
+                    "name": "table_name",
+                    "type": "varchar"
+                }
+            ],
+            "replicateNullsAndAny": false
+        },
+        "sources": [
+            {
+                "@type": "com.facebook.presto.sql.planner.plan.SortNode",
+                "id": "306",
+                "source": {
+                    "@type": "com.facebook.presto.sql.planner.plan.RemoteSourceNode",
+                    "id": "304",
+                    "sourceFragmentIds": [
+                        "2"
+                    ],
+                    "outputVariables": [
+                        {
+                            "@type": "variable",
+                            "name": "table_name",
+                            "type": "varchar"
+                        }
+                    ],
+                    "ensureSourceOrdering": false,
+                    "exchangeType": "REPARTITION"
+                },
+                "orderingScheme": {
+                    "orderBy": [
+                        {
+                            "variable": {
+                                "@type": "variable",
+                                "name": "table_name",
+                                "type": "varchar"
+                            },
+                            "sortOrder": "ASC_NULLS_LAST"
+                        }
+                    ]
+                },
+                "isPartial": true
+            }
+        ],
+        "inputs": [
+            [
+                {
+                    "@type": "variable",
+                    "name": "table_name",
+                    "type": "varchar"
+                }
+            ]
+        ],
+        "ensureSourceOrdering": true,
+        "orderingScheme": {
+            "orderBy": [
+                {
+                    "variable": {
+                        "@type": "variable",
+                        "name": "table_name",
+                        "type": "varchar"
+                    },
+                    "sortOrder": "ASC_NULLS_LAST"
+                }
+            ]
+        }
+    },
+    "variables": [
+        {
+            "@type": "variable",
+            "name": "table_name",
+            "type": "varchar"
+        }
+    ],
+    "partitioning": {
+        "connectorHandle": {
+            "@type": "$remote",
+            "partitioning": "FIXED",
+            "function": "ROUND_ROBIN"
+        }
+    },
+    "tableScanSchedulingOrder": [],
+    "partitioningScheme": {
+        "partitioning": {
+            "handle": {
+                "connectorHandle": {
+                    "@type": "$remote",
+                    "partitioning": "SINGLE",
+                    "function": "SINGLE"
+                }
+            },
+            "arguments": []
+        },
+        "outputLayout": [
+            {
+                "@type": "variable",
+                "name": "table_name",
+                "type": "varchar"
+            }
+        ],
+        "replicateNullsAndAny": false,
+        "bucketToPartition": [
+            0
+        ]
+    },
+    "stageExecutionDescriptor": {
+        "stageExecutionStrategy": "UNGROUPED_EXECUTION",
+        "groupedExecutionScanNodes": [],
+        "totalLifespans": 1
+    },
+    "outputTableWriterFragment": false,
+    "statsAndCosts": {
+        "stats": {},
+        "costs": {}
+    },
+    "jsonRepresentation": "{\n  \"id\" : \"338\",\n  \"name\" : \"LocalMerge\",\n  \"identifier\" : \"[table_name ASC_NULLS_LAST]\",\n  \"details\" : \"\",\n  \"children\" : [ {\n    \"id\" : \"306\",\n    \"name\" : \"PartialSort\",\n    \"identifier\" : \"[table_name ASC_NULLS_LAST]\",\n    \"details\" : \"\",\n    \"children\" : [ {\n      \"id\" : \"304\",\n      \"name\" : \"RemoteSource\",\n      \"identifier\" : \"[2]\",\n      \"details\" : \"\",\n      \"children\" : [ ],\n      \"remoteSources\" : [ \"2\" ],\n      \"estimates\" : [ ]\n    } ],\n    \"remoteSources\" : [ ],\n    \"estimates\" : [ {\n      \"outputRowCount\" : \"NaN\",\n      \"totalSize\" : \"NaN\",\n      \"confident\" : false,\n      \"variableStatistics\" : { },\n      \"joinNodeStatsEstimate\" : {\n        \"nullJoinBuildKeyCount\" : \"NaN\",\n        \"joinBuildKeyCount\" : \"NaN\",\n        \"nullJoinProbeKeyCount\" : \"NaN\",\n        \"joinProbeKeyCount\" : \"NaN\"\n      },\n      \"tableWriterNodeStatsEstimate\" : {\n        \"taskCountIfScaledWriter\" : \"NaN\"\n      },\n      \"partialAggregationStatsEstimate\" : {\n        \"inputBytes\" : \"NaN\",\n        \"outputBytes\" : \"NaN\",\n        \"inputRowCount\" : \"NaN\",\n        \"outputRowCount\" : \"NaN\"\n      }\n    } ]\n  } ],\n  \"remoteSources\" : [ ],\n  \"estimates\" : [ {\n    \"outputRowCount\" : \"NaN\",\n    \"totalSize\" : \"NaN\",\n    \"confident\" : false,\n    \"variableStatistics\" : { },\n    \"joinNodeStatsEstimate\" : {\n      \"nullJoinBuildKeyCount\" : \"NaN\",\n      \"joinBuildKeyCount\" : \"NaN\",\n      \"nullJoinProbeKeyCount\" : \"NaN\",\n      \"joinProbeKeyCount\" : \"NaN\"\n    },\n    \"tableWriterNodeStatsEstimate\" : {\n      \"taskCountIfScaledWriter\" : \"NaN\"\n    },\n    \"partialAggregationStatsEstimate\" : {\n      \"inputBytes\" : \"NaN\",\n      \"outputBytes\" : \"NaN\",\n      \"inputRowCount\" : \"NaN\",\n      \"outputRowCount\" : \"NaN\"\n    }\n  } ]\n}"
+}

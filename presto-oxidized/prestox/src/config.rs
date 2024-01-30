@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashSet},
+    collections::HashSet,
     fmt::Display,
     hash::Hash,
     str::FromStr,
