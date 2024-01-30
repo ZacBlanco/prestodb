@@ -3,7 +3,6 @@ use std::time::Duration;
 use actix_web::middleware::Logger;
 use actix_web::{web, App, HttpServer};
 
-
 use log::{debug, error, info, warn};
 use prestox::config::generate_config;
 use prestox::discovery;

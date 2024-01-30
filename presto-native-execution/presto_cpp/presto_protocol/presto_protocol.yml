@@ -341,7 +341,6 @@ JavaClasses:
   - presto-spi/src/main/java/com/facebook/presto/spi/plan/TopNNode.java
   - presto-hive/src/main/java/com/facebook/presto/hive/HiveMetadataUpdateHandle.java
   - presto-spi/src/main/java/com/facebook/presto/spi/ConnectorMetadataUpdateHandle.java
-  - presto-hive/src/main/java/com/facebook/presto/hive/HivePartitioningHandle.java
   - presto-main/src/main/java/com/facebook/presto/split/EmptySplit.java
   - presto-spi/src/main/java/com/facebook/presto/spi/relation/LambdaDefinitionExpression.java
   - presto-spi/src/main/java/com/facebook/presto/spi/plan/SortNode.java

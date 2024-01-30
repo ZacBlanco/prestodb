@@ -39,6 +39,7 @@ IGNORED_TYPES = {
 }
 
 # noinspection PyInterpreter
+
 language = {
     "cpp": {
         "TypeMap": {
@@ -81,38 +82,32 @@ language = {
                 "OptionalInt": "Option<i32>",
                 "boolean": "bool",
                 r"^long$": "i64",
-                r"^double$": "f64",
+                r"^double$": "OrderedFloat<f64>",
+                r"^float$": "OrderedFloat<f32>",
                 r"^int$": "i32",
                 r"Optional<int\[\]>": "Option<Vec<i32>>",
                 # bytes are serialized to base64 strings in json
                 r"Optional<byte\[\]>": "Option<Base64Encoded>",
                 "UUID": "Uuid",
                 "List<byte>": "Vec<u8>",
-                r"Set<(.*)>": r"std::collections::HashSet<\1>",
+                r"Set<(.*)>": r"std::collections::BTreeSet<\1>",
                 r"List<(.*)>": r"Vec<\1>",
                 r"Optional<(.*)>": r"Option<\1>",
-                r"Map<(.*)>": r"std::collections::HashMap<\1>",
+                r"Map<(.*)>": r"std::collections::BTreeMap<\1>",
                 r"ExchangeNode.Type": "ExchangeNodeType",
                 r"JoinNode.Type": "JoinNodeType",
                 r"JoinNode.EquiJoinClause": "EquiJoinClause",
                 # variable name mappings
                 "ExecutionFailureInfo": "Option<Box<ExecutionFailureInfo>>",
-                "type": "prestoType",
+                "RowExpression": "Box<RowExpression>",
+                "^PlanNode$": "Box<PlanNode>",
+                "VariableReferenceExpression": "RowExpression",
+                "HiveColumnHandle": "ColumnHandle",
+                "TpchTableHandle": "ConnectorTableHandle",
+                "CallExpression": "RowExpression",
+                r"^type$": "prestoType",
                 "self": "selfVar",
             },
-            "extraDerives": {
-                "VariableReferenceExpression": ['Hash', "Eq", "PartialEq"],
-                "SqlFunctionId": ['Hash', "Eq", "PartialEq"],
-                "SourceLocation": ['Hash', "Eq", "PartialEq"],
-                "HiveColumnHandle": ['Hash', "Eq", "PartialEq"],
-                "CallExpression": ['Hash', "Eq", "PartialEq"],
-                "Aggregation": ['Hash', "Eq", "PartialEq"],
-                "OrderingScheme": ['Hash', "Eq", "PartialEq"],
-                "ScheduledSplit": ['Hash', "Eq", "PartialEq"],
-                "Split": ['Hash', "Eq", "PartialEq"],
-                "ValueEntry": ['Hash', "Eq", "PartialEq"],
-                "SplitContext": ['Hash', "Eq", "PartialEq"],
-            }
         },
 }
 
@@ -222,6 +217,7 @@ def special(filepath, current_class, key, classes, depends):
 def process_file(filepath, config, lang, subclasses, classes, depends):
     filename = util.get_filename(filepath)
 
+
     if filepath.endswith(".hpp.inc"):
         special(filepath, filename[: -len(".hpp.inc")], "hinc", classes, depends)
         return
@@ -303,7 +299,6 @@ def process_file(filepath, config, lang, subclasses, classes, depends):
                 classes[current_class].subclass = True
                 classes[current_class].super_class = subclasses[current_class].super
                 classes[current_class].json_key = subclasses[current_class].key
-
         match = re.match(r" *@JsonProperty.*", line)
         if json and match and len(fields) >= 3:
             line = re.sub(r"^[^@]*", "", line)
@@ -321,11 +316,7 @@ def process_file(filepath, config, lang, subclasses, classes, depends):
             add_field(
                 current_class, fileroot, name, type, config, lang, classes, depends
             )
-            extra_derives = ''
-            for key, value in lang['extraDerives'].items():
-                if re.match(current_class, key):
-                    extra_derives = ", " + ", ".join(value)
-                    classes[current_class].extraDerives = extra_derives
+            
 
         match = re.match(r" *{ *", line)
         if json and match:
@@ -338,6 +329,9 @@ def process_file(filepath, config, lang, subclasses, classes, depends):
 
             json = False
 
+    if 'super_class' in classes[current_class]:
+        classes[classes[current_class].super_class].entries.append(classes[current_class])
+        del classes[current_class]
     return classes
 
 
@@ -379,6 +373,7 @@ def main():
         classes[abstract_name].class_name = abstract_name
         classes[abstract_name].field_name = member_name(abstract_name)
         classes[abstract_name].abstract = True
+        classes[abstract_name].entries = []
         classes[abstract_name].super_class = abstract_value.super
         if "comparable" in abstract_value:
             classes[abstract_name].comparable = True
