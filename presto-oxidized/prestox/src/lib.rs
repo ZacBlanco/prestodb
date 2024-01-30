@@ -4,4 +4,6 @@ pub mod err;
 pub mod protocol;
 pub mod resources;
 pub mod server;
+pub mod spi;
+pub mod substrait_converter;
 pub mod task;

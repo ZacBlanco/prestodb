@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 pub enum Error {
     BackwardsTime,
     MissingParallelism,
+    PlanDecode(String),
 }
 
 impl Display for Error {

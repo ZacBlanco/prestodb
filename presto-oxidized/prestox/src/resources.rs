@@ -1,12 +1,13 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use config::Config;
-use dashmap::mapref::one::RefMut;
-use dashmap::DashMap;
+use crossbeam_skiplist::map::Entry;
+use crossbeam_skiplist::SkipMap;
 use futures::Future;
+use ordered_float::OrderedFloat;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 use uuid::Uuid;
@@ -83,8 +84,8 @@ impl TryFrom<&AppState> for NodeStatus {
                 pools: Default::default(),
             },
             processors: num_cpus::get() as i32,
-            processCpuLoad: 0.0,
-            systemCpuLoad: 0.0,
+            processCpuLoad: OrderedFloat(0.0),
+            systemCpuLoad: OrderedFloat(0.0),
             heapUsed: 0,
             heapAvailable: 0,
             nonHeapUsed: 0,
@@ -148,7 +149,7 @@ pub struct Service {
     id: String,
     #[serde(rename = "type")]
     service_type: String,
-    properties: HashMap<String, String>,
+    properties: BTreeMap<String, String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -161,7 +162,7 @@ pub struct Announcement {
 
 impl Announcement {
     pub fn new(info: &NodeInfo) -> Self {
-        let mut props = HashMap::new();
+        let mut props = BTreeMap::new();
         props.insert("node_version".to_string(), "testversion".to_string());
         props.insert("coordinator".to_string(), false.to_string());
         props.insert(
@@ -204,9 +205,9 @@ pub struct MemoryPool {
     max_bytes: i64,
     reserved_bytes: Mutex<i64>,
     reserved_revocable_bytes: Mutex<i64>,
-    query_memory_reservations: HashMap<QueryId, i64>,
-    tagged_memory_allocations: HashMap<QueryId, HashMap<String, i64>>,
-    query_memory_revocable_reservations: HashMap<QueryId, i64>,
+    query_memory_reservations: BTreeMap<QueryId, i64>,
+    tagged_memory_allocations: BTreeMap<QueryId, BTreeMap<String, i64>>,
+    query_memory_revocable_reservations: BTreeMap<QueryId, i64>,
 }
 
 impl MemoryPool {
@@ -233,8 +234,8 @@ impl MemoryPool {
         }
     }
 
-    fn get_allocations(&self) -> HashMap<QueryId, Vec<MemoryAllocation>> {
-        let mut map = HashMap::new();
+    fn get_allocations(&self) -> BTreeMap<QueryId, Vec<MemoryAllocation>> {
+        let mut map = BTreeMap::new();
         for (query_id, allocations) in self.tagged_memory_allocations.iter() {
             let allocs = allocations
                 .iter()
@@ -252,12 +253,12 @@ impl MemoryPool {
 #[derive(Debug)]
 pub struct LocalMemoryManager {
     max_memory: i64,
-    pools: HashMap<MemoryPoolId, MemoryPool>,
+    pools: BTreeMap<MemoryPoolId, MemoryPool>,
 }
 
 impl Default for LocalMemoryManager {
     fn default() -> Self {
-        let mut pools = HashMap::new();
+        let mut pools = BTreeMap::new();
         let general_pool = MemoryPoolId("general".to_string());
         pools.insert(
             general_pool.clone(),
@@ -272,7 +273,7 @@ impl Default for LocalMemoryManager {
 
 impl LocalMemoryManager {
     pub async fn get_info(&self) -> MemoryInfo {
-        let mut info = HashMap::new();
+        let mut info = BTreeMap::new();
         for (k, v) in self.pools.iter() {
             info.insert(k.clone(), v.get_pool_info().await);
         }
@@ -301,22 +302,21 @@ impl TaskId {
 
 #[derive(Debug)]
 pub struct LocalTaskManager {
-    tasks: Arc<DashMap<TaskId, SqlTask>>,
+    tasks: Arc<crossbeam_skiplist::SkipMap<TaskId, SqlTask>>,
     node_info: Arc<NodeInfo>,
 }
 
 impl LocalTaskManager {
     pub fn new(node_info: Arc<NodeInfo>) -> Self {
         LocalTaskManager {
-            tasks: Arc::new(DashMap::new()),
+            tasks: Arc::new(SkipMap::new()),
             node_info,
         }
     }
 
-    fn get_task(&self, id: &TaskId) -> RefMut<'_, TaskId, SqlTask> {
+    fn get_task(&self, id: &TaskId) -> Entry<'_, TaskId, SqlTask> {
         self.tasks
-            .entry(id.clone())
-            .or_insert(SqlTask::new(&id, self.node_info.as_ref()))
+            .get_or_insert_with(id.clone(), || SqlTask::new(&id, self.node_info.as_ref()))
     }
 }
 
@@ -329,15 +329,15 @@ impl<'a> TaskManager for LocalTaskManager {
     }
 
     fn get_task_info(&self, id: &TaskId, summarize: bool) -> TaskInfo {
-        self.get_task(&id).get_task_info(summarize)
+        self.get_task(&id).value().get_task_info(summarize)
     }
 
     fn get_task_status(&self, id: &TaskId) -> TaskStatus {
-        self.get_task(&id).get_task_status()
+        self.get_task(&id).value().get_task_status()
     }
 
     fn update_task(&self, id: &TaskId, request: TaskUpdateRequest, summarize: bool) -> TaskInfo {
-        self.get_task(id).update(request).get_task_info(summarize)
+        self.get_task(id).value().update(request).get_task_info(summarize)
     }
 
     fn get_task_status_future(
@@ -353,13 +353,15 @@ impl<'a> TaskManager for LocalTaskManager {
     }
 
     fn abort_task(&self, task: &TaskId, summarize: bool) -> TaskInfo {
-        let task = self.get_task(task);
+        let binding = self.get_task(task);
+        let task = binding.value();
         task.abort();
         task.get_task_info(summarize)
     }
 
     fn cancel_task(&self, task: &TaskId, summarize: bool) -> TaskInfo {
-        let task = self.get_task(task);
+        let binding = self.get_task(task);
+        let task = binding.value();
         task.cancel();
         task.get_task_info(summarize)
     }
