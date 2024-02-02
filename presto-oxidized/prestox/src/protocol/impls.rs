@@ -1,7 +1,9 @@
-use std::{collections::BTreeMap};
+use std::collections::{BTreeMap, HashSet};
 
 use super::resources::{
-    BufferState, ConnectorId, DataSize, DateTime, Lifespan, MetadataUpdates, OutputBufferInfo, RuntimeStats, TaskId, TaskStats
+    Assignments, BufferState, ConnectorId, DataSize, DateTime, Lifespan, MetadataUpdates,
+    OutputBufferInfo, PlanNode, RowExpression, RuntimeStats, ScheduledSplit, TaskId, TaskSource,
+    TaskStats,
 };
 use chrono::Utc;
 use regex::Regex;
@@ -42,6 +44,16 @@ impl<'de> Deserialize<'de> for TaskId {
         D: serde::Deserializer<'de>,
     {
         deserializer.deserialize_str(TaskIdVisitor)
+    }
+}
+
+impl TaskSource {
+    pub fn update(&self, _other: &TaskSource) -> Option<TaskSource> {
+        None
+    }
+
+    pub fn get_splits<'b, 'a: 'b>(&'a self) -> HashSet<&'a ScheduledSplit> {
+        HashSet::new()
     }
 }
 
@@ -273,6 +285,201 @@ impl<'de> Visitor<'de> for LifespanVisitor {
                 v
             ))),
         }
+    }
+}
+
+impl PlanNode {
+    pub fn get_output_variables<'a>(&self) -> Vec<&RowExpression> {
+        match self {
+            PlanNode::DistinctLimitNode {
+                id: _,
+                source: _,
+                limit: _,
+                partial: _,
+                distinctVariables,
+                hashVariable,
+                timeoutMillis: _,
+            } => {
+                let mut outputs = vec![];
+                for item in distinctVariables.iter() {
+                    outputs.push(item);
+                }
+                if let Some(hashvar) = hashVariable {
+                    outputs.push(hashvar);
+                }
+                outputs
+            }
+            PlanNode::ExchangeNode {
+                id: _,
+                prestoType: _,
+                scope: _,
+                partitioningScheme,
+                sources: _,
+                inputs: _,
+                ensureSourceOrdering: _,
+                orderingScheme: _,
+            } => partitioningScheme.outputLayout.iter().collect(),
+            PlanNode::GroupIdNode {
+                id: _,
+                source: _,
+                groupingSets,
+                groupingColumns: _,
+                aggregationArguments,
+                groupIdVariable,
+            } => {
+                let mut groupsets = HashSet::new();
+                groupingSets.iter().for_each(|set| {
+                    set.iter().for_each(|x| {
+                        groupsets.insert(x);
+                    })
+                });
+                let mut result = vec![];
+                result.append(&mut groupsets.iter().map(|x| *x).collect());
+                result.append(&mut aggregationArguments.iter().collect());
+                result.push(&groupIdVariable);
+                result
+            }
+            PlanNode::RowNumberNode {
+                id: _,
+                source,
+                partitionBy: _,
+                rowNumberVariable,
+                maxRowCountPerPartition: _,
+                partial,
+                hashVariable: _,
+            } => {
+                let mut result = source.get_output_variables();
+                if !partial {
+                    result.push(rowNumberVariable);
+                }
+                result
+            }
+            PlanNode::TopNRowNumberNode {
+                id: _,
+                source,
+                specification: _,
+                rowNumberVariable,
+                maxRowCountPerPartition: _,
+                partial,
+                hashVariable: _,
+            } => {
+                let mut result = source.get_output_variables();
+                if !partial {
+                    result.push(rowNumberVariable);
+                }
+                result
+            }
+            PlanNode::TableWriterMergeNode {
+                id: _,
+                source: _,
+                rowCountVariable,
+                fragmentVariable,
+                tableCommitContextVariable,
+                statisticsAggregation,
+            } => {
+                let mut result = vec![];
+                result.push(rowCountVariable);
+                result.push(fragmentVariable);
+                result.push(tableCommitContextVariable);
+                if let Some(agg) = statisticsAggregation {
+                    let vars = agg.groupingVariables.iter().map(|x| x);
+                    result.append(&mut vars.collect());
+                    result.append(&mut agg.aggregations.keys().collect());
+                }
+                result
+            }
+            PlanNode::UnnestNode {
+                id: _,
+                source: _,
+                replicateVariables,
+                unnestVariables,
+                ordinalityVariable,
+            } => {
+                let mut result = vec![];
+                result.append(&mut replicateVariables.iter().collect());
+                result.append(&mut unnestVariables.values().flatten().collect());
+                if let Some(var) = ordinalityVariable {
+                    result.push(var);
+                }
+                result
+            }
+            PlanNode::OutputNode {
+                id: _,
+                source: _,
+                columnNames: _,
+                outputVariables,
+            } => outputVariables.iter().collect(),
+            PlanNode::ProjectNode {
+                id: _,
+                source: _,
+                assignments,
+                locality: _,
+            } => assignments.get_outputs(),
+            PlanNode::RemoteSourceNode {
+                id: _,
+                sourceFragmentIds: _,
+                outputVariables,
+                ensureSourceOrdering: _,
+                orderingScheme: _,
+                exchangeType: _,
+            } => outputVariables.iter().collect(),
+            PlanNode::TableScanNode {
+                id: _,
+                table: _,
+                outputVariables,
+                assignments: _,
+            } => outputVariables.iter().collect(),
+            PlanNode::ValuesNode {
+                location: _,
+                id: _,
+                outputVariables,
+                rows: _,
+                valuesNodeLabel: _,
+            } => outputVariables.iter().collect(),
+            PlanNode::SemiJoinNode {
+                id: _,
+                source,
+                filteringSource: _,
+                sourceJoinVariable: _,
+                filteringSourceJoinVariable: _,
+                semiJoinOutput,
+                sourceHashVariable: _,
+                filteringSourceHashVariable: _,
+                distributionType: _,
+                dynamicFilters: _,
+            } => {
+                let mut result = source.get_output_variables();
+                result.push(semiJoinOutput);
+                result
+            }
+            PlanNode::MergeJoinNode {
+                id: _,
+                prestoType: _,
+                left: _,
+                right: _,
+                criteria: _,
+                outputVariables,
+                filter: _,
+                leftHashVariable: _,
+                rightHashVariable: _,
+            } => outputVariables.iter().collect(),
+            PlanNode::AssignUniqueId {
+                id: _,
+                source,
+                idVariable,
+            } => {
+                let mut result = source.get_output_variables();
+                result.push(idVariable);
+                result
+            }
+            x @ _ => x.get_output_variables(),
+        }
+    }
+}
+
+impl Assignments {
+    fn get_outputs(&self) -> Vec<&RowExpression> {
+        self.assignments.keys().collect()
     }
 }
 

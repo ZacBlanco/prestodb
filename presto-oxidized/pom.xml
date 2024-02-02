@@ -17,18 +17,6 @@
         <air.checkstyle.config-file>src/checkstyle/presto-checks.xml</air.checkstyle.config-file>
     </properties>
     <dependencies>
-        <dependency>
-            <groupId>com.facebook.presto</groupId>
-            <artifactId>presto-iceberg</artifactId>
-            <scope>test</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>com.facebook.presto</groupId>
-            <artifactId>presto-iceberg</artifactId>
-            <scope>test</scope>
-            <type>test-jar</type>
-        </dependency>
     </dependencies>
 
     <build>
