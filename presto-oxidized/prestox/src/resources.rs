@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap};
+use std::collections::BTreeMap;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -337,7 +337,10 @@ impl<'a> TaskManager for LocalTaskManager {
     }
 
     fn update_task(&self, id: &TaskId, request: TaskUpdateRequest, summarize: bool) -> TaskInfo {
-        self.get_task(id).value().update(request).get_task_info(summarize)
+        self.get_task(id)
+            .value()
+            .update(request)
+            .get_task_info(summarize)
     }
 
     fn get_task_status_future(

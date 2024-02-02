@@ -2,7 +2,7 @@
 //!
 
 use std::{
-    collections::{BTreeSet},
+    collections::BTreeSet,
     sync::{
         atomic::{AtomicBool, AtomicI64},
         Arc,
