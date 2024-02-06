@@ -13,9 +13,9 @@ fn main() {
         std::fs::read_to_string(TIME_ZONE_INDEX_FILE).expect("zone-index.properties should exist");
     let result = data
         .lines()
-        .filter(|x| !x.starts_with("#"))
+        .filter(|x| !x.starts_with('#'))
         .map(|x| {
-            let parts = x.split(" ").collect::<Vec<_>>();
+            let parts = x.split(' ').collect::<Vec<_>>();
             (parts[0].parse::<i16>().expect("parse tzid"), parts[1])
         })
         .collect::<Vec<_>>();
@@ -36,7 +36,7 @@ fn main() {
             }
         }
     };
-    println!("{}", function.to_string());
+    println!("{}", function);
     std::fs::write(
         Path::new(&std::env::var("OUT_DIR").unwrap()).join(OUTPUT_TIME_ZONE_DB),
         function.to_string(),

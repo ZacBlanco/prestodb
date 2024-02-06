@@ -5,7 +5,6 @@ use crate::protocol::resources::PlanNode;
 use crate::protocol::resources::ScheduledSplit;
 use crate::spi::ConnectorPageSource;
 use std::fmt::Debug;
-use std::ops::Deref;
 
 use std::sync::Arc;
 
@@ -22,10 +21,10 @@ use tokio::sync::Mutex;
 
 #[derive(Debug)]
 pub struct DriverX {
-    operators: Vec<Arc<Box<PrestoQueryOperator>>>,
-    source_operator: Option<Arc<Box<PrestoQueryOperator>>>,
+    operators: Vec<Arc<PrestoQueryOperator>>,
+    source_operator: Option<Arc<PrestoQueryOperator>>,
     #[allow(unused)]
-    graph: Arc<Box<PlanNode>>,
+    graph: Arc<PlanNode>,
     mailbox: Mutex<Receiver<DriverMessage>>,
 }
 
@@ -38,7 +37,7 @@ pub enum DriverMessage {
 }
 
 struct QueryGraphDriver {
-    op: Arc<Box<dyn QueryGraphOperator>>,
+    op: Arc<dyn QueryGraphOperator>,
     next_op: Sender<DriverMessage>,
     mailbox: Receiver<DriverMessage>,
 }
@@ -85,7 +84,7 @@ pub trait UpdateOperator: QueryGraphOperator {
 }
 
 fn explore_query_graph(
-    graph: Arc<Box<PlanNode>>,
+    graph: Arc<PlanNode>,
     result_address: Sender<DriverMessage>,
 ) -> Vec<PrestoQueryOperator> {
     let mut ops = vec![];
@@ -111,12 +110,12 @@ fn explore_query_graph(
             });
         }
     }
-    return ops;
+    ops
 }
 
 #[derive(Debug)]
 struct PrestoQueryOperator {
-    node: Arc<Box<PlanNode>>,
+    node: Arc<PlanNode>,
     post_office: Sender<DriverMessage>,
     mailbox: Mutex<Receiver<DriverMessage>>,
 }
@@ -157,14 +156,14 @@ impl PrestoQueryOperator {
 #[async_trait]
 impl QueryGraphOperator for PrestoQueryOperator {
     fn as_source_operator(&self) -> Option<&dyn SourceOperator> {
-        match self.node.as_ref().deref() {
+        match self.node.as_ref() {
             PlanNode::ValuesNode { .. } => Some(self),
             _ => None,
         }
     }
 
     async fn handle(&self, message: DriverMessage) {
-        match self.node.as_ref().deref() {
+        match self.node.as_ref() {
             PlanNode::ValuesNode {
                 location: _,
                 id: _,
@@ -177,7 +176,7 @@ impl QueryGraphOperator for PrestoQueryOperator {
                 DriverMessage::RevokeMemory => todo!(),
                 DriverMessage::Split(_) => todo!(),
             },
-            _node @ _ => (),
+            _node => (),
         }
     }
 
@@ -199,7 +198,7 @@ impl SourceOperator for PrestoQueryOperator {
     async fn start(&self) -> Result<()> {
         let new_post = self.post_office.clone();
         let new_node = self.node.clone();
-        let result = match new_node.as_ref().deref() {
+        let result = match new_node.as_ref() {
             PlanNode::ValuesNode {
                 location: _,
                 id: _,
@@ -225,7 +224,7 @@ impl SourceOperator for PrestoQueryOperator {
                 });
                 Ok(())
             }
-            a @ _ => Err(anyhow!("SourceOperators not implemented for {:?}", a)),
+            a => Err(anyhow!("SourceOperators not implemented for {:?}", a)),
         };
         let _ = self.post_office.send(DriverMessage::Finished).await;
         result
@@ -233,16 +232,15 @@ impl SourceOperator for PrestoQueryOperator {
 }
 
 impl DriverX {
-    pub fn new(query_graph: Arc<Box<PlanNode>>) -> Result<Self> {
+    pub fn new(query_graph: Arc<PlanNode>) -> Result<Self> {
         let (sender, receiver) = channel(10);
         let all_operators = explore_query_graph(query_graph.clone(), sender)
             .into_iter()
-            .map(Box::new)
             .map(Arc::new)
             .collect::<Vec<_>>();
-        let mut source_operator: Option<Arc<Box<PrestoQueryOperator>>> = None;
-        let _delete_operator: Option<Arc<Box<PrestoQueryOperator>>> = None;
-        let _update_operator: Option<Arc<Box<PrestoQueryOperator>>> = None;
+        let mut source_operator: Option<Arc<PrestoQueryOperator>> = None;
+        let _delete_operator: Option<Arc<PrestoQueryOperator>> = None;
+        let _update_operator: Option<Arc<PrestoQueryOperator>> = None;
         for op in all_operators.iter() {
             if let Some(_operator) = op.as_source_operator() {
                 match source_operator {
@@ -267,14 +265,14 @@ impl DriverX {
         Ok(DriverX {
             graph: query_graph,
             operators: all_operators,
-            source_operator: source_operator,
+            source_operator,
             mailbox: Mutex::new(receiver),
         })
     }
 
     pub async fn start(&self) {
         debug!("executing plan: {:#?}", self.graph);
-        if let None = self.source_operator {
+        if self.source_operator.is_none() {
             warn!("no source operator found for execution");
             return;
         }
@@ -283,13 +281,16 @@ impl DriverX {
         let mut drivers = vec![];
         debug!("{:#?}", self.operators);
         for driver in self.operators.iter() {
-            if let None = driver.as_source_operator() {
+            if driver.as_source_operator().is_none() {
                 let driver = driver.clone();
                 drivers.push(tokio::spawn(async move { driver.run_operator().await }));
             }
         }
 
-        debug!("plan execution: source: {:#?}, drivers: {:#?}", self.source_operator, drivers);
+        debug!(
+            "plan execution: source: {:#?}, drivers: {:#?}",
+            self.source_operator, drivers
+        );
 
         loop {
             match self.mailbox.lock().await.recv().await {

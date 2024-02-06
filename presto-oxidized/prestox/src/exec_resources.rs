@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::fmt::Display;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -112,7 +113,7 @@ pub struct NodeInfo {
 }
 
 fn get_location(port: u16) -> String {
-    return format!("http://localhost:{}", port);
+    format!("http://localhost:{}", port)
 }
 
 impl NodeInfo {
@@ -301,9 +302,10 @@ impl LocalMemoryManager {
     }
 }
 
-impl TaskId {
-    pub fn to_string(&self) -> String {
-        format!(
+impl Display for TaskId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
             "{}.{}.{}.{}.{}",
             self.query_id, self.stage_id, self.stage_execution_id, self.id, self.attempt_number
         )
@@ -326,11 +328,11 @@ impl LocalTaskManager {
 
     fn get_task(&self, id: &TaskId) -> Entry<'_, TaskId, SqlTask> {
         self.tasks
-            .get_or_insert_with(id.clone(), || SqlTask::new(&id, self.node_info.as_ref()))
+            .get_or_insert_with(id.clone(), || SqlTask::new(id, self.node_info.as_ref()))
     }
 }
 
-impl<'a> TaskManager for LocalTaskManager {
+impl TaskManager for LocalTaskManager {
     fn get_all_task_info(&self, summarize: bool) -> Vec<TaskInfo> {
         self.tasks
             .iter()
@@ -339,11 +341,11 @@ impl<'a> TaskManager for LocalTaskManager {
     }
 
     fn get_task_info(&self, id: &TaskId, summarize: bool) -> TaskInfo {
-        self.get_task(&id).value().get_task_info(summarize)
+        self.get_task(id).value().get_task_info(summarize)
     }
 
     fn get_task_status(&self, id: &TaskId) -> TaskStatus {
-        self.get_task(&id).value().get_task_status()
+        self.get_task(id).value().get_task_status()
     }
 
     fn update_task(

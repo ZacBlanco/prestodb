@@ -85,7 +85,7 @@ pub fn generate_config() -> Config {
 impl<T: FromStr + Default + Clone> ConfigBuilder<T> {
     pub fn new(name: &str) -> Self {
         assert!(name.is_ascii(), "config property name must only be ascii");
-        if !name.chars().all(|c| c.is_alphanumeric() || c == '.') {}
+        name.chars().all(|c| c.is_alphanumeric() || c == '.');
         ConfigBuilder {
             name: Some(name.to_string()),
             ..Default::default()
@@ -114,7 +114,7 @@ impl<T: FromStr + Default + Clone> ConfigBuilder<T> {
             description: self.description.unwrap_or("".to_string()),
             env_var: self
                 .env_var
-                .unwrap_or_else(|| name.to_uppercase().replace(".", "_")),
+                .unwrap_or_else(|| name.to_uppercase().replace('.', "_")),
             default: self.default,
         };
         {
@@ -147,6 +147,6 @@ impl<T: FromStr + Clone> ConfigProperty<T> {
 
 impl<T: FromStr + Clone> Display for ConfigProperty<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&format!("{}", &self.name))
+        f.write_str(&self.name.to_string())
     }
 }
