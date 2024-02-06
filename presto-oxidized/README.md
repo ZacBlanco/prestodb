@@ -1,4 +1,4 @@
-# Presto Oxidized
+# Presto Oxidized (Prestox)
 
 (_Prest-Ox_ and _Presto X_ are both valid pronunciations)
 
@@ -19,31 +19,35 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh && \
     rustup default nightly
 ```
 
-- Execute the presto rust protocol generation script (run these from the root of the repository)
+- Install python's `virtualenv` and `jq`
     
 ```bash
 # protocol generation pre-requisites
-pip3 install -U chevron pyyaml && \
+pip3 install -U virtualenv && \
     brew install jq && \
-    export PRESTO_HOME="$(pwd)" && \
-    # head to the protocol directory
-    pushd presto-native-execution/presto_cpp/presto_protocol && \
-    # generate the protocol. Writes output to ./presto-oxidized/prestox/src/protocol/resources.rs
-    make presto_protocol.rs && \
-    popd
 ```
 
 
 ### Compilation
 
-Cargo is used for compilation. Run the following commands to build all parts of the prestox module:
+Cargo is used for compilation. However, a command to generate the presto protocol structs needs
+to be executed before the project can be compiled. It is recommended to use maven to compile the
+first time before building the rust code directly.
 
 ```bash
+./mvnw install -pl presto-oxidized -am -DskipTests
+```
 
+Under the hood, we're running `make presto_protocol.rs` with a few other dependencies. The script
+and logic for this part can be found under `./presto-native-execution/presto_cpp/presto_protocol`
+
+This should generate rust implementations of Presto's JSON serializable objects. You can build the
+rust code directly under the `prestox` directory.
+
+```bash
 cd ./presto-oxidixed/prestox
 cargo build
 ```
-
 
 ### Running the server
 

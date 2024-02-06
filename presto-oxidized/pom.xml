@@ -127,6 +127,19 @@
                         </configuration>
                     </execution>
                     <execution>
+                        <id>check for jq</id>
+                        <phase>validate</phase>
+                        <goals>
+                            <goal>exec</goal>
+                        </goals>
+                        <configuration>
+                            <executable>jq</executable>
+                            <arguments>
+                                <argument>--version</argument>
+                            </arguments>
+                        </configuration>
+                    </execution>
+                    <execution>
                         <id>check for cargo</id>
                         <phase>validate</phase>
                         <goals>
