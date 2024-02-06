@@ -106,7 +106,6 @@ public class PrestoXQueryRunner
 
     public static void main(String[] args)
     {
-
         Logging.initialize();
         Object wait = new Object();
         try (DistributedQueryRunner queryRunner = createQueryRunner(OptionalInt.of(1))) {
