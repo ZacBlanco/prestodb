@@ -93,7 +93,7 @@ impl<'de> Visitor<'de> for TaskIdVisitor {
     where
         E: serde::de::Error,
     {
-        let parts = v.split(".").collect::<Vec<_>>();
+        let parts = v.split('.').collect::<Vec<_>>();
         if parts.len() != 5 {
             return Err(E::custom(format!(
                 "TaskId Should have had 5 parts. Only found {}",
@@ -130,6 +130,12 @@ impl Default for MetadataUpdates {
             connectorId: Default::default(),
             metadataUpdates: Default::default(),
         }
+    }
+}
+
+impl Default for OutputBufferInfo {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -313,7 +319,7 @@ impl<'de> Visitor<'de> for LifespanVisitor {
 }
 
 impl PlanNode {
-    pub fn get_output_variables<'a>(&self) -> Vec<&RowExpression> {
+    pub fn get_output_variables(&self) -> Vec<&RowExpression> {
         match self {
             PlanNode::DistinctLimitNode {
                 id: _,
@@ -358,9 +364,9 @@ impl PlanNode {
                     })
                 });
                 let mut result = vec![];
-                result.append(&mut groupsets.iter().map(|x| *x).collect());
+                result.append(&mut groupsets.iter().copied().collect());
                 result.append(&mut aggregationArguments.iter().collect());
-                result.push(&groupIdVariable);
+                result.push(groupIdVariable);
                 result
             }
             PlanNode::RowNumberNode {
@@ -406,7 +412,7 @@ impl PlanNode {
                 result.push(fragmentVariable);
                 result.push(tableCommitContextVariable);
                 if let Some(agg) = statisticsAggregation {
-                    let vars = agg.groupingVariables.iter().map(|x| x);
+                    let vars = agg.groupingVariables.iter();
                     result.append(&mut vars.collect());
                     result.append(&mut agg.aggregations.keys().collect());
                 }
@@ -500,7 +506,7 @@ impl PlanNode {
         }
     }
 
-    pub fn get_sources(&self) -> Option<Vec<&Box<PlanNode>>> {
+    pub fn get_sources(&self) -> Option<Vec<&PlanNode>> {
         match self {
             Self::OutputNode {
                 id: _,
@@ -538,7 +544,7 @@ impl PlanNode {
                 count: _,
                 step: _,
             } => Some(vec![source]),
-            x @ _ => {
+            x => {
                 warn!("get_sources not implemented for {:?}", x);
                 todo!()
             }

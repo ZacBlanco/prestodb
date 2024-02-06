@@ -138,7 +138,7 @@ impl SqlTask {
             taskInstanceIdMostSignificantBits: id_bits.1 as i64,
             version: self
                 .next_task_info_version
-                .fetch_add(1, std::sync::atomic::Ordering::Acquire) as i64,
+                .fetch_add(1, std::sync::atomic::Ordering::Acquire),
             state: self.task_state_machine.get_state(),
             selfVar: self.location.clone(),
             completedDriverGroups: BTreeSet::new(),
@@ -179,7 +179,7 @@ impl SqlTask {
 
     pub fn update(&self, request: TaskUpdateRequest) -> Result<&Self> {
         let plan: PlanFragment = (&(request.fragment.unwrap())).try_into()?;
-        let driver = DriverX::new(Arc::new(plan.root))?;
+        let driver = DriverX::new(Arc::new(*plan.root))?;
         let _task = tokio::spawn(async move { driver.start().await });
         Ok(self)
     }
