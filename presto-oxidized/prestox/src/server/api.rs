@@ -7,6 +7,7 @@ use actix_web::{delete, get, head, post, put, web, Error, HttpResponse};
 use log::{debug, error};
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
+use tokio::time::timeout;
 
 pub fn worker_config(config: &mut web::ServiceConfig) {
     config
@@ -132,7 +133,7 @@ async fn post_task(
     let info = state
         .task_manager
         .update_task(&task_id.0, rq.unwrap(), params.summarize.is_some())
-        .map_err(|e| actix_web::error::ErrorBadRequest(e))?;
+        .map_err(actix_web::error::ErrorBadRequest)?;
     Ok(HttpResponse::Ok().json(info))
 }
 
@@ -201,12 +202,11 @@ async fn data_plane_get_buffer_token(
     params: web::Path<(TaskId, OutputBufferId, i64)>,
 ) -> Response {
     let (_taskid, _buffer, _token) = params.as_ref();
-    match tokio::time::timeout(std::time::Duration::from_secs(1), async {
+    let task = timeout(std::time::Duration::from_secs(1), async {
         let var_name: Result<(), ()> = Err(());
         var_name
-    })
-    .await
-    {
+    });
+    match task.await {
         Ok(result) => match result {
             Ok(_) => Ok(HttpResponse::Ok()
                 .content_type(PRESTO_PAGES_CONTENT_TYPE)
@@ -216,7 +216,7 @@ async fn data_plane_get_buffer_token(
                 .append_header((PRESTO_BUFFER_COMPLETE, ""))
                 .finish()),
             Err(_) => Ok(HttpResponse::InternalServerError()
-                .json(format!("Failed to retrieve buffer result"))),
+                .json("Failed to retrieve buffer result".to_string())),
         },
         Err(e) => Ok(HttpResponse::InternalServerError()
             .json(format!("Timeout retrieving result after {} ", e))),
