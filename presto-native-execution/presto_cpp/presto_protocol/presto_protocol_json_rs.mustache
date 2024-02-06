@@ -18,8 +18,9 @@ pub type Long = i64;
 pub type Short = i16;
 pub type Map<K, V> = std::collections::BTreeMap<K, V>;
 pub type List<T> = Vec<T>;
-pub type Base64Encoded = String;
 
+#[derive(Debug, Clone, Ord, Hash, PartialOrd, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Base64Encoded(pub String);
 
 /// Types with custom serde implementations
 
@@ -156,7 +157,7 @@ pub struct TupleDomain<T: Eq + Ord + PartialOrd + Hash + PartialEq> {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Hash, Eq, PartialEq, PartialOrd, Ord)]
-pub struct Block;
+pub struct Block(pub String);
 
 #[derive(Clone, Debug, Serialize, Deserialize, Hash, Eq, PartialEq, PartialOrd, Ord)]
 pub struct HivePageSinkMetadata;

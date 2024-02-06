@@ -13,11 +13,14 @@ impl TryFrom<&Base64Encoded> for PlanFragment {
 
     fn try_from(value: &Base64Encoded) -> Result<Self, Self::Error> {
         let mut result = Vec::new();
-        if let Err(e) = BASE64_STANDARD_NO_PAD.decode_vec(value, &mut result) {
-            return Err(Error::PlanDecode(format!("{:?}", e)).into());
+        if let Err(e) = base64::prelude::BASE64_STANDARD.decode_vec(&value.0, &mut result) {
+            return Err(
+                Error::PlanDecode(format!("base64 decode error: {:?}: {}", e, value.0)).into(),
+            );
         }
 
-        serde_json::from_slice(&result).map_err(|e| Error::PlanDecode(format!("{:?}", e)).into())
+        serde_json::from_slice(&result)
+            .map_err(|e| Error::PlanDecode(format!("json decode error{:?}", e)).into())
     }
 }
 
@@ -232,7 +235,7 @@ mod test {
         let output = resources.join(Path::new(
             "test-resources/test-serialized-fragment-deserialized.json",
         ));
-        let input: Base64Encoded = read_to_string(input).unwrap() as Base64Encoded;
+        let input: Base64Encoded = Base64Encoded(read_to_string(input).unwrap());
         let output = read_to_string(output).unwrap();
         let fragment = serde_json::from_str::<PlanFragment>(&output).unwrap();
         let plan: PlanFragment = (&input).try_into().unwrap();

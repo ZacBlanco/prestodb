@@ -3,13 +3,14 @@ use std::time::Duration;
 use actix_web::middleware::Logger;
 use actix_web::{web, App, HttpServer};
 
-use log::{debug, error, info, warn};
+use log::{debug, info, warn};
 use prestox::config::generate_config;
 use prestox::discovery;
-use prestox::resources::AppState;
+use prestox::exec_resources::AppState;
 use prestox::server::api::worker_config;
 use prestox::{self};
-use tokio::{signal, time};
+use tokio::signal::unix::SignalKind;
+use tokio::{select, signal, time};
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
@@ -62,12 +63,17 @@ async fn main() -> std::io::Result<()> {
         }
     });
 
-    match signal::ctrl_c().await {
-        Ok(()) => {}
-        Err(err) => {
-            error!("Failed to listen for shutdown signal: {}", err)
-        }
+    let mut sig_int = signal::unix::signal(SignalKind::interrupt())?;
+    let mut sig_term = signal::unix::signal(SignalKind::terminate())?;
+    let mut sig_hup = signal::unix::signal(SignalKind::hangup())?;
+    let mut sig_quit = signal::unix::signal(SignalKind::quit())?;
+    select! {
+        _ = sig_int.recv() => debug!("received sigint..."),
+        _ = sig_term.recv() => debug!("received sigterm..."),
+        _ = sig_hup.recv() => debug!("received sighup..."),
+        _ = sig_quit.recv() => debug!("received sigquit..."),
     }
+
     info!("Gracefully shutting down...");
     heartbeat_task.abort();
     server_task.abort();

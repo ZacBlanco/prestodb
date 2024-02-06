@@ -1,9 +1,9 @@
 pub mod config;
 pub mod discovery;
 pub mod err;
+pub mod exec_resources;
 pub mod execution;
 pub mod protocol;
-pub mod resources;
 pub mod server;
 pub mod spi;
 pub mod substrait_converter;

@@ -1,8 +1,8 @@
 use reqwest::{Client, Error, Response};
 
 use crate::{
+    exec_resources::{Announcement, NodeInfo},
     protocol::resources::NodeStatus,
-    resources::{Announcement, NodeInfo},
 };
 
 pub async fn announce(

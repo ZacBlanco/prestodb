@@ -18,11 +18,14 @@ use tokio::{sync::RwLock, time::Instant};
 use uuid::Uuid;
 
 use crate::{
+    exec_resources::NodeInfo,
+    execution::oxidize::DriverX,
     protocol::resources::{
-        DateTime, OutputBufferInfo, TaskId, TaskInfo, TaskState, TaskStatus, TaskUpdateRequest, URI,
+        DateTime, OutputBufferInfo, PlanFragment, TaskId, TaskInfo, TaskState, TaskStatus,
+        TaskUpdateRequest, URI,
     },
-    resources::NodeInfo,
 };
+use anyhow::Result;
 
 #[derive(Debug)]
 struct TaskInstanceId(Uuid);
@@ -174,8 +177,11 @@ impl SqlTask {
         }
     }
 
-    pub fn update(&self, _request: TaskUpdateRequest) -> &Self {
-        self
+    pub fn update(&self, request: TaskUpdateRequest) -> Result<&Self> {
+        let plan: PlanFragment = (&(request.fragment.unwrap())).try_into()?;
+        let driver = DriverX::new(Arc::new(plan.root))?;
+        let _task = tokio::spawn(async move { driver.start().await });
+        Ok(self)
     }
 
     pub fn abort(&self) {
