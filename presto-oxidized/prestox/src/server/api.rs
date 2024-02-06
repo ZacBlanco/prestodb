@@ -1,7 +1,7 @@
+use crate::exec_resources::{AppState, MemoryPoolAssignmentsRequest, TaskManager};
 use crate::protocol::resources::{
     Duration, MemoryPoolId, NodeStatus, OutputBufferId, ServerInfo, TaskId, TaskUpdateRequest,
 };
-use crate::resources::{AppState, MemoryPoolAssignmentsRequest, TaskManager};
 
 use actix_web::{delete, get, head, post, put, web, Error, HttpResponse};
 use log::{debug, error};
@@ -131,7 +131,8 @@ async fn post_task(
     }
     let info = state
         .task_manager
-        .update_task(&task_id.0, rq.unwrap(), params.summarize.is_some());
+        .update_task(&task_id.0, rq.unwrap(), params.summarize.is_some())
+        .map_err(|e| actix_web::error::ErrorBadRequest(e))?;
     Ok(HttpResponse::Ok().json(info))
 }
 

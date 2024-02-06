@@ -3,6 +3,7 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use anyhow::Result;
 use config::Config;
 use crossbeam_skiplist::map::Entry;
 use crossbeam_skiplist::SkipMap;
@@ -12,7 +13,9 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
-use crate::config::DISCOVERY_URI;
+use anyhow::anyhow;
+
+use crate::config::{DISCOVERY_URI, HTTP_SERVER_PORT};
 use crate::err::error::Error;
 use crate::err::error::Error::BackwardsTime;
 use crate::protocol::resources::{
@@ -33,8 +36,8 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub fn new(config: &Config) -> Result<Self, Error> {
-        let node_info = Arc::new(NodeInfo::new()?);
+    pub fn new(config: &Config) -> Result<Self> {
+        let node_info = Arc::new(NodeInfo::new(config)?);
         Ok(AppState {
             node_info: node_info.clone(),
             node_version: NodeVersion {
@@ -108,19 +111,26 @@ pub struct NodeInfo {
     pub start_time: u128,
 }
 
+fn get_location(port: u16) -> String {
+    return format!("http://localhost:{}", port);
+}
+
 impl NodeInfo {
-    fn new() -> Result<Self, Error> {
+    fn new(config: &Config) -> Result<Self> {
+        let server_port = HTTP_SERVER_PORT
+            .lookup(config)
+            .ok_or(anyhow!("missing http port config"))?;
         Ok(NodeInfo {
             environment: "testing".to_string(),
             pool: "general".to_string(),
             node_id: Uuid::new_v4().to_string(),
-            location: "http://localhost:9090".to_string(),
+            location: get_location(server_port),
             binary_spec: "<unknown>".to_string(),
             config_spec: "<unknown>".to_string(),
             instance_id: "<unknown>".to_string(),
-            internal_address: "localhost:9090".to_string(),
-            external_address: "localhost:9090".to_string(),
-            bind_ip: SocketAddr::from((IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 9090)),
+            internal_address: format!("localhost:{}", server_port),
+            external_address: format!("localhost:{}", server_port),
+            bind_ip: SocketAddr::from((IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), server_port)),
             start_time: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .map_err(|_| BackwardsTime)?
@@ -169,7 +179,7 @@ impl Announcement {
             "connectorIds".to_string(),
             "system,tpch,iceberg".to_string(),
         );
-        props.insert("http".to_string(), "http://localhost:9090".to_string());
+        props.insert("http".to_string(), info.location.to_string());
         Self {
             environment: "testing".to_string(),
             pool: "general".to_string(),
@@ -336,11 +346,17 @@ impl<'a> TaskManager for LocalTaskManager {
         self.get_task(&id).value().get_task_status()
     }
 
-    fn update_task(&self, id: &TaskId, request: TaskUpdateRequest, summarize: bool) -> TaskInfo {
-        self.get_task(id)
+    fn update_task(
+        &self,
+        id: &TaskId,
+        request: TaskUpdateRequest,
+        summarize: bool,
+    ) -> Result<TaskInfo> {
+        Ok(self
+            .get_task(id)
             .value()
-            .update(request)
-            .get_task_info(summarize)
+            .update(request)?
+            .get_task_info(summarize))
     }
 
     fn get_task_status_future(
@@ -379,7 +395,12 @@ pub trait TaskManager {
         task: &TaskId,
         current_state: TaskState,
     ) -> Box<dyn Future<Output = TaskStatus>>;
-    fn update_task(&self, id: &TaskId, request: TaskUpdateRequest, summarize: bool) -> TaskInfo;
+    fn update_task(
+        &self,
+        id: &TaskId,
+        request: TaskUpdateRequest,
+        summarize: bool,
+    ) -> Result<TaskInfo>;
     fn get_task_instance_id(&self, task: TaskId) -> String;
     fn abort_task(&self, task: &TaskId, summarize: bool) -> TaskInfo;
     fn cancel_task(&self, task: &TaskId, summarize: bool) -> TaskInfo;

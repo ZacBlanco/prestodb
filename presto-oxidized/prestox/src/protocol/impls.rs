@@ -1,13 +1,37 @@
-use std::collections::{BTreeMap, HashSet};
+use std::{
+    collections::{BTreeMap, HashSet},
+    fmt::Debug,
+};
 
 use super::resources::{
-    Assignments, BufferState, ConnectorId, DataSize, DateTime, Lifespan, MetadataUpdates,
+    Assignments, Block, BufferState, ConnectorId, DataSize, DateTime, Lifespan, MetadataUpdates,
     OutputBufferInfo, PlanNode, RowExpression, RuntimeStats, ScheduledSplit, TaskId, TaskSource,
     TaskStats,
 };
 use chrono::Utc;
+use log::warn;
 use regex::Regex;
 use serde::{de::Visitor, Deserialize, Serialize};
+
+pub struct Page {
+    #[allow(unused)]
+    pub blocks: Vec<Block>,
+    pub position_count: u32,
+    pub size_in_bytes: u64,
+    pub retained_size_in_bytes: u64,
+    pub logical_size_in_bytes: u64,
+}
+
+impl Debug for Page {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Page")
+            .field("position_count", &self.position_count)
+            .field("size_in_bytes", &self.size_in_bytes)
+            .field("retained_size_in_bytes", &self.retained_size_in_bytes)
+            .field("logical_size_in_bytes", &self.logical_size_in_bytes)
+            .finish()
+    }
+}
 
 // impl Hash for ConnectorTransactionHandle {
 //     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
@@ -472,7 +496,52 @@ impl PlanNode {
                 result.push(idVariable);
                 result
             }
-            x @ _ => x.get_output_variables(),
+            _ => todo!(),
+        }
+    }
+
+    pub fn get_sources(&self) -> Option<Vec<&Box<PlanNode>>> {
+        match self {
+            Self::OutputNode {
+                id: _,
+                source,
+                columnNames: _,
+                outputVariables: _,
+            } => Some(vec![source]),
+            Self::TableScanNode {
+                id: _,
+                table: _,
+                outputVariables: _,
+                assignments: _,
+            } => None,
+            Self::FilterNode {
+                id: _,
+                source,
+                predicate: _,
+            } => Some(vec![source]),
+            Self::ProjectNode {
+                id: _,
+                source,
+                assignments: _,
+                locality: _,
+            } => Some(vec![source]),
+            Self::ValuesNode {
+                location: _,
+                id: _,
+                outputVariables: _,
+                rows: _,
+                valuesNodeLabel: _,
+            } => None,
+            Self::LimitNode {
+                id: _,
+                source,
+                count: _,
+                step: _,
+            } => Some(vec![source]),
+            x @ _ => {
+                warn!("get_sources not implemented for {:?}", x);
+                todo!()
+            }
         }
     }
 }
