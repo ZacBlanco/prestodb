@@ -20,6 +20,7 @@ path = "src/bin/config-reference.rs"
 [dependencies]
 actix-web = "4.4.1"
 anyhow = { version = "1.0.79", features = ["backtrace"] }
+async-trait = "0.1.77"
 base64 = "0.21.7"
 chrono = { version = "0.4.33", features = ["serde"] }
 config = "0.13.4"
