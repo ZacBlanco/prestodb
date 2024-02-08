@@ -1,23 +1,26 @@
-use crate::protocol::impls::Page;
-use crate::protocol::resources::Block;
+use crate::protocol::page::Block;
+use crate::protocol::page::Page;
 use crate::protocol::resources::PlanNode;
 
 use crate::protocol::resources::ScheduledSplit;
 use crate::spi::ConnectorPageSource;
 use std::fmt::Debug;
 
+use std::ops::Deref;
 use std::sync::Arc;
 
 use anyhow::anyhow;
 use anyhow::Result;
 use async_trait::async_trait;
 use log::debug;
+use log::error;
 use log::warn;
 
 use tokio::sync::mpsc::channel;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::Mutex;
+use tokio::sync::RwLock;
 
 #[derive(Debug)]
 pub struct DriverX {
@@ -75,10 +78,13 @@ pub trait SourceOperator: QueryGraphOperator {
     fn no_more_splits(&self);
     async fn start(&self) -> Result<()>;
 }
+
+#[allow(clippy::type_complexity)]
 pub trait DeleteOperator: QueryGraphOperator {
     fn set_page_source(&self, source: Arc<Box<dyn Fn() -> Option<Box<dyn ConnectorPageSource>>>>);
 }
 
+#[allow(clippy::type_complexity)]
 pub trait UpdateOperator: QueryGraphOperator {
     fn set_page_source(&self, source: Arc<Box<dyn Fn() -> Option<Box<dyn ConnectorPageSource>>>>);
 }
@@ -94,7 +100,7 @@ fn explore_query_graph(
             // add yourself
             ops.push(PrestoQueryOperator {
                 node: graph.clone(),
-                post_office: result_address,
+                post_office: RwLock::new(Some(result_address)),
                 mailbox: Mutex::new(recv),
             });
             // now add your children
@@ -105,7 +111,7 @@ fn explore_query_graph(
         None => {
             ops.push(PrestoQueryOperator {
                 node: graph.clone(),
-                post_office: result_address,
+                post_office: RwLock::new(Some(result_address)),
                 mailbox: Mutex::new(recv),
             });
         }
@@ -116,22 +122,30 @@ fn explore_query_graph(
 #[derive(Debug)]
 struct PrestoQueryOperator {
     node: Arc<PlanNode>,
-    post_office: Sender<DriverMessage>,
+    post_office: tokio::sync::RwLock<Option<Sender<DriverMessage>>>,
     mailbox: Mutex<Receiver<DriverMessage>>,
 }
 
 impl PrestoQueryOperator {
     async fn run_operator(&self) -> Result<()> {
         loop {
-            match self.mailbox.lock().await.recv().await {
+            let msg = self.mailbox.lock().await.recv().await;
+            match msg {
                 Some(msg) => match msg {
                     DriverMessage::Input(page) => {
                         self.handle(DriverMessage::Input(page)).await;
                     }
                     DriverMessage::Finished => {
-                        if let Err(e) = self.post_office.send(DriverMessage::Finished).await {
-                            warn!("{:?} failed to send finished message - next op already closed?: {:?}", self, e);
-                            break;
+                        // loop over the mailbox to get any more pages, then send the finished message
+                        match self.post_office.read().await.deref() {
+                            Some(chan) => {
+                                if let Err(e) = chan.send(DriverMessage::Finished).await {
+                                    warn!("{:?} failed to send finished message - next op already closed?: {:?}", self, e);
+                                }
+                            }
+                            None => {
+                                break;
+                            }
                         }
                     }
                     DriverMessage::RevokeMemory => self.revoke_memory().await,
@@ -149,6 +163,7 @@ impl PrestoQueryOperator {
                 }
             }
         }
+        *self.post_office.write().await = None;
         Ok(())
     }
 }
@@ -163,21 +178,26 @@ impl QueryGraphOperator for PrestoQueryOperator {
     }
 
     async fn handle(&self, message: DriverMessage) {
+        #[allow(clippy::match_single_binding)]
         match self.node.as_ref() {
-            PlanNode::ValuesNode {
-                location: _,
-                id: _,
-                outputVariables: _,
-                rows: _,
-                valuesNodeLabel: _,
-            } => match message {
-                DriverMessage::Input(_) => todo!(),
-                DriverMessage::Finished => todo!(),
-                DriverMessage::RevokeMemory => todo!(),
-                DriverMessage::Split(_) => todo!(),
-            },
-            _node => (),
-        }
+            _ => {
+                // default, just forward message to next operator
+                match self.post_office.read().await.deref() {
+                    Some(chan) => {
+                        if let Err(e) = chan.send(message).await {
+                            error!(
+                                "operator {:?} errored sending to next operator: {:?}",
+                                self.node, e
+                            )
+                        }
+                    }
+                    None => warn!(
+                        "can't send message {:?} to next op because channel was closed",
+                        message
+                    ),
+                }
+            }
+        };
     }
 
     async fn revoke_memory(&self) {
@@ -196,7 +216,7 @@ impl SourceOperator for PrestoQueryOperator {
     }
 
     async fn start(&self) -> Result<()> {
-        let new_post = self.post_office.clone();
+        let new_post = self.post_office.read().await.clone();
         let new_node = self.node.clone();
         let result = match new_node.as_ref() {
             PlanNode::ValuesNode {
@@ -208,8 +228,8 @@ impl SourceOperator for PrestoQueryOperator {
             } => {
                 let blocks = rows
                     .iter()
-                    .map(|row| row.iter().map(|_expr| Block).collect::<Vec<_>>())
-                    .map(|_| Block("".to_string()))
+                    .map(|row| row.iter().map(|_expr| Block::default()).collect::<Vec<_>>())
+                    .map(|_| Block::default())
                     .collect::<Vec<_>>();
                 let position_count = blocks.len() as u32;
                 tokio::spawn(async move {
@@ -220,13 +240,28 @@ impl SourceOperator for PrestoQueryOperator {
                         retained_size_in_bytes: 0,
                         logical_size_in_bytes: 0,
                     };
-                    let _ = new_post.send(DriverMessage::Input(page)).await;
+                    match new_post {
+                        Some(chan) => {
+                            if let Err(e) = chan.send(DriverMessage::Input(page)).await {
+                                warn!("ValuesNode failed to send to next op: {:?}", e);
+                            }
+                        }
+                        None => warn!("sender channel was dropped"),
+                    }
                 });
                 Ok(())
             }
             a => Err(anyhow!("SourceOperators not implemented for {:?}", a)),
         };
-        let _ = self.post_office.send(DriverMessage::Finished).await;
+        match self.post_office.read().await.deref() {
+            Some(chan) => {
+                if let Err(e) = chan.send(DriverMessage::Finished).await {
+                    warn!("source operator failed to send finished message: {:?}", e);
+                }
+            }
+            None => warn!("failed to send driver finished because channel was closed"),
+        }
+        *self.post_office.write().await = None;
         result
     }
 }
@@ -279,7 +314,6 @@ impl DriverX {
         let source_op = self.source_operator.as_ref().unwrap().clone();
         let start_handle = tokio::spawn(async move { source_op.start().await });
         let mut drivers = vec![];
-        debug!("{:#?}", self.operators);
         for driver in self.operators.iter() {
             if driver.as_source_operator().is_none() {
                 let driver = driver.clone();
@@ -287,19 +321,14 @@ impl DriverX {
             }
         }
 
-        debug!(
-            "plan execution: source: {:#?}, drivers: {:#?}",
-            self.source_operator, drivers
-        );
 
         loop {
             match self.mailbox.lock().await.recv().await {
                 Some(DriverMessage::Finished) => {
-                    debug!("Final execution is done");
-                    break;
+                    debug!("Final execution should be done soon");
                 }
                 Some(page_result) => {
-                    debug!("driver got message: {:?}", page_result);
+                    debug!("output: {:?}", page_result);
                 }
                 None => {
                     debug!("mailbox finished");
