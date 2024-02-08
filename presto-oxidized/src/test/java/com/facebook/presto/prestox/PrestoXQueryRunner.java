@@ -43,7 +43,7 @@ public class PrestoXQueryRunner
     {
     }
 
-    public static DistributedQueryRunner createQueryRunner(OptionalInt nodeCount)
+    public static DistributedQueryRunner createQueryRunner(OptionalInt nodeCount, OptionalInt httpPort)
             throws Exception
     {
         Logging logger = Logging.initialize();
@@ -54,7 +54,7 @@ public class PrestoXQueryRunner
                 .build();
 
         DistributedQueryRunner.Builder queryRunnerBuilder = DistributedQueryRunner.builder(session);
-
+        queryRunnerBuilder.setExtraProperties(ImmutableMap.<String, String>of("http-server.http.port", Integer.toString(httpPort.orElse(8080))));
         queryRunnerBuilder.setNodeCount(nodeCount.orElse(1));
         queryRunnerBuilder.setExternalWorkerLauncher(Optional.of((idx, discoveryUri) -> {
             Path tempDirectoryPath = null;
@@ -108,7 +108,7 @@ public class PrestoXQueryRunner
     {
         Logging.initialize();
         Object wait = new Object();
-        try (DistributedQueryRunner queryRunner = createQueryRunner(OptionalInt.of(1))) {
+        try (DistributedQueryRunner queryRunner = createQueryRunner(OptionalInt.of(0), OptionalInt.of(8080))) {
             log.info("======== SERVER STARTED ========");
             log.info("====\n%s\n====", queryRunner.getCoordinator().getBaseUrl());
             synchronized (wait) {
