@@ -1,10 +1,7 @@
-use std::{
-    collections::{BTreeMap, HashSet},
-    fmt::Debug,
-};
+use std::collections::{BTreeMap, HashSet};
 
 use super::resources::{
-    Assignments, Block, BufferState, ConnectorId, DataSize, DateTime, Lifespan, MetadataUpdates,
+    Assignments, BufferState, ConnectorId, DataSize, DateTime, Lifespan, MetadataUpdates,
     OutputBufferInfo, PlanNode, RowExpression, RuntimeStats, ScheduledSplit, TaskId, TaskSource,
     TaskStats,
 };
@@ -12,40 +9,6 @@ use chrono::Utc;
 use log::warn;
 use regex::Regex;
 use serde::{de::Visitor, Deserialize, Serialize};
-
-pub struct Page {
-    #[allow(unused)]
-    pub blocks: Vec<Block>,
-    pub position_count: u32,
-    pub size_in_bytes: u64,
-    pub retained_size_in_bytes: u64,
-    pub logical_size_in_bytes: u64,
-}
-
-impl Debug for Page {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Page")
-            .field("position_count", &self.position_count)
-            .field("size_in_bytes", &self.size_in_bytes)
-            .field("retained_size_in_bytes", &self.retained_size_in_bytes)
-            .field("logical_size_in_bytes", &self.logical_size_in_bytes)
-            .finish()
-    }
-}
-
-// impl Hash for ConnectorTransactionHandle {
-//     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-//         self.class.hash(state);
-//         self.content.to_string().hash(state);
-//     }
-// }
-
-// impl Hash for ConnectorSplit {
-//     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-//         self.class.hash(state);
-//         self.content.to_string().hash(state);
-//     }
-// }
 
 impl From<&TaskId> for String {
     fn from(value: &TaskId) -> Self {
@@ -124,6 +87,7 @@ impl Default for ConnectorId {
     }
 }
 
+#[allow(clippy::derivable_impls)]
 impl Default for MetadataUpdates {
     fn default() -> Self {
         Self {
