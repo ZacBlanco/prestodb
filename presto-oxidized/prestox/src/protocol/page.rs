@@ -1,6 +1,6 @@
 use std::{
     fmt::{Debug, Display},
-    marker::PhantomData,
+    ops::Deref,
     str::FromStr,
 };
 
@@ -27,6 +27,81 @@ impl Page {
     }
 }
 
+#[derive(Debug)]
+pub struct SerializedPage(Bytes);
+
+impl SerializedPage {
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+
+impl Deref for SerializedPage {
+    type Target = Bytes;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl TryFrom<Page> for SerializedPage {
+    type Error = anyhow::Error;
+
+    fn try_from(value: Page) -> Result<Self, Self::Error> {
+        Ok(SerializedPage(Bytes::try_from(
+            SerializedPageRepr::try_from(value)?,
+        )?))
+    }
+}
+
+#[derive(Default)]
+pub struct PageBuilder {
+    #[allow(unused)]
+    types: Vec<SqlType>,
+    blocks: Vec<BlockBuilder>,
+    positions: u32,
+}
+
+impl PageBuilder {
+    pub fn new() -> Self {
+        PageBuilder::default()
+    }
+
+    pub fn add_channel(&mut self, block: BlockBuilder) -> anyhow::Result<()> {
+        if self.blocks.is_empty() {
+            self.positions = block.get_positions()
+        } else if block.get_positions() != self.positions {
+            return Err(anyhow!("block position counts do not match"));
+        }
+        self.blocks.push(block);
+        Ok(())
+    }
+
+    pub fn build(self) -> Page {
+        let blocks: Vec<Block> = self.blocks.into_iter().map(BlockBuilder::build).collect();
+        let size = blocks.iter().map(Block::size_in_bytes).sum::<usize>() as u64;
+        Page {
+            blocks,
+            position_count: self.positions,
+            size_in_bytes: size,
+            retained_size_in_bytes: size,
+            logical_size_in_bytes: size,
+        }
+    }
+}
+
+impl TryFrom<Page> for Bytes {
+    type Error = anyhow::Error;
+
+    fn try_from(value: Page) -> Result<Self, Self::Error> {
+        Bytes::try_from(SerializedPageRepr::try_from(value)?)
+    }
+}
+
 impl Debug for Page {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Page")
@@ -44,6 +119,13 @@ impl Debug for Page {
 pub struct Block {
     data: Bytes,
     encoding: BlockEncoding,
+}
+
+impl Block {
+    pub fn size_in_bytes(&self) -> usize {
+        // 4-byte length + length of encoding name + data
+        4 + self.encoding.as_str().len() + self.data.len()
+    }
 }
 
 impl Default for Block {
@@ -68,12 +150,11 @@ impl From<Block> for Bytes {
 }
 
 #[derive(Debug)]
-pub enum BlockBuilder<T> {
+pub enum BlockBuilder {
     Array {
         entries: usize,
         nulls: BitVec<u8>,
         data: BytesMut,
-        phantom: PhantomData<T>,
     },
 }
 
@@ -86,12 +167,6 @@ impl BlockBuf for Bytes {
         buf.put(&self[..])
     }
 }
-
-// impl BlockBuf for u32 {
-//     fn put_into(&self, buf: &mut BytesMut) {
-//         buf.put_u32_le(*self);
-//     }
-// }
 
 macro_rules! blockbuf_primitive {
     ($implementor:ty) => {
@@ -112,20 +187,25 @@ blockbuf_primitive!(u16);
 blockbuf_primitive!(u32);
 blockbuf_primitive!(u64);
 
-impl<T: BlockBuf> BlockBuilder<T> {
-    pub fn new(sql_type: SqlType, initial_entries: usize) -> BlockBuilder<T> {
+impl BlockBuilder {
+    pub fn new(sql_type: SqlType, initial_entries: usize) -> BlockBuilder {
         match sql_type {
             SqlType::Scalar(_) => BlockBuilder::Array {
                 entries: 0,
                 nulls: BitVec::with_capacity(initial_entries),
                 data: BytesMut::with_capacity(initial_entries),
-                phantom: PhantomData,
             },
             SqlType::Parametric(_) => todo!(),
         }
     }
 
-    pub fn append(&mut self, value: T) {
+    pub fn get_positions(&self) -> u32 {
+        match self {
+            BlockBuilder::Array { entries, .. } => *entries as u32,
+        }
+    }
+
+    pub fn append<T: BlockBuf>(&mut self, value: T) {
         match self {
             BlockBuilder::Array {
                 entries,
@@ -140,6 +220,31 @@ impl<T: BlockBuf> BlockBuilder<T> {
         }
     }
 
+    pub fn extend(&mut self, other: BlockBuilder) -> anyhow::Result<()> {
+        match self {
+            BlockBuilder::Array {
+                entries,
+                nulls,
+                data,
+            } => match other {
+                BlockBuilder::Array {
+                    entries: other_entries,
+                    nulls: mut other_nulls,
+                    data: other_data,
+                } => {
+                    *entries += other_entries;
+                    nulls.append(&mut other_nulls);
+                    data.put(other_data);
+                    Ok(())
+                }
+                #[allow(unreachable_patterns)]
+                _ => Err(anyhow!("incompatible block builder with extend.")),
+            },
+            #[allow(unreachable_patterns)]
+            _ => Err(anyhow!("block builder does not support extend")),
+        }
+    }
+
     pub fn append_null(&mut self) {
         match self {
             BlockBuilder::Array { entries, nulls, .. } => {
@@ -150,7 +255,7 @@ impl<T: BlockBuf> BlockBuilder<T> {
     }
 
     /// returns the element at T, or None if null. Errors when index is out of range
-    pub fn get(&self, index: usize) -> anyhow::Result<Option<&T>> {
+    pub fn get<T: BlockBuf>(&self, index: usize) -> anyhow::Result<Option<&T>> {
         // first, calculate the index of the element
         match self {
             BlockBuilder::Array {
@@ -198,6 +303,7 @@ impl<T: BlockBuf> BlockBuilder<T> {
                     nulls.set_uninitialized(false);
                     output.put_slice(nulls.into_vec().as_slice())
                 }
+                output.put(data);
 
                 Block {
                     data: output.freeze(),
@@ -208,16 +314,16 @@ impl<T: BlockBuf> BlockBuilder<T> {
     }
 }
 
-impl<T: BlockBuf> TryFrom<Base64Encoded> for BlockBuilder<T> {
+impl TryFrom<&Base64Encoded> for BlockBuilder {
     type Error = Error;
 
-    fn try_from(value: Base64Encoded) -> Result<Self, Self::Error> {
-        let decoded = base64::prelude::BASE64_STANDARD.decode(value.0)?;
+    fn try_from(value: &Base64Encoded) -> Result<Self, Self::Error> {
+        let decoded = base64::prelude::BASE64_STANDARD.decode(&value.0)?;
         BlockBuilder::try_from(Bytes::from(decoded))
     }
 }
 
-impl<T: BlockBuf> TryFrom<Bytes> for BlockBuilder<T> {
+impl TryFrom<Bytes> for BlockBuilder {
     type Error = Error;
 
     fn try_from(value: Bytes) -> Result<Self, Self::Error> {
@@ -231,7 +337,7 @@ impl<T: BlockBuf> TryFrom<Bytes> for BlockBuilder<T> {
     }
 }
 
-struct SerializedPageRepr {
+pub struct SerializedPageRepr {
     header: SerializedPageHeaderRepr,
     columns: u32,
     /// blocks should always be equivalent in length to columns
@@ -261,8 +367,9 @@ impl TryFrom<Page> for SerializedPageRepr {
             header: SerializedPageHeaderRepr {
                 rows: value.position_count,
                 codec: 0x0,
-                uncompressed_size: value.size_in_bytes as u32,
-                size: value.size_in_bytes as u32,
+                // add 4 due to column count
+                uncompressed_size: 4 + value.size_in_bytes as u32,
+                size: 4 + value.size_in_bytes as u32,
                 checksum: 0x0,
             },
             columns: value.blocks.len() as u32,
@@ -327,17 +434,6 @@ impl From<SerializedBlock> for Bytes {
     }
 }
 
-// enum SerializedBlock {
-//     ArrayType {
-//         /// not stored in the serialized form
-//         bytes_per_value: u32,
-//         number_of_rows: u32,
-//         has_nulls: Option<bool>,
-//         nulls_bitflags: Bytes,
-//         data: Bytes,
-//     },
-// }
-
 #[allow(unused)]
 #[derive(Debug)]
 enum BlockEncoding {
@@ -378,7 +474,7 @@ impl BlockEncoding {
         }
     }
 
-    fn deserialize_from<T>(&self, mut bytes: Bytes) -> anyhow::Result<BlockBuilder<T>> {
+    fn deserialize_from(&self, mut bytes: Bytes) -> anyhow::Result<BlockBuilder> {
         match self {
             Self::ByteArray
             | Self::ShortArray
@@ -399,7 +495,6 @@ impl BlockEncoding {
                     entries: rows as usize,
                     nulls: null_flags,
                     data: copied,
-                    phantom: PhantomData,
                 })
             }
             encoding => Err(anyhow!(
@@ -442,20 +537,20 @@ mod test {
     #[test]
     fn test_deserialize_block() -> anyhow::Result<()> {
         let serialized_block = Base64Encoded("CQAAAElOVF9BUlJBWQEAAAAAAQAAAA==".to_string());
-        let mut block: BlockBuilder<u32> = BlockBuilder::try_from(serialized_block)?;
-        assert!(block.get(0).is_ok());
-        assert!(block.get(0).unwrap().is_some());
-        assert_eq!(*block.get(0).unwrap().unwrap(), 1u32);
+        let mut block: BlockBuilder = BlockBuilder::try_from(&serialized_block)?;
+        assert!(block.get::<u32>(0).is_ok());
+        assert!(block.get::<u32>(0).unwrap().is_some());
+        assert_eq!(*block.get::<u32>(0).unwrap().unwrap(), 1u32);
         block.append_null();
         block.append_null();
-        assert!(block.get(1).is_ok());
-        assert!(block.get(1).unwrap().is_none());
-        assert!(block.get(2).is_ok());
-        assert!(block.get(2).unwrap().is_none());
+        assert!(block.get::<u32>(1).is_ok());
+        assert!(block.get::<u32>(1).unwrap().is_none());
+        assert!(block.get::<u32>(2).is_ok());
+        assert!(block.get::<u32>(2).unwrap().is_none());
         block.append(17u32);
-        assert!(block.get(3).is_ok());
-        assert!(block.get(3).unwrap().is_some());
-        assert_eq!(*block.get(3).unwrap().unwrap(), 17u32);
+        assert!(block.get::<u32>(3).is_ok());
+        assert!(block.get::<u32>(3).unwrap().is_some());
+        assert_eq!(*block.get::<u32>(3).unwrap().unwrap(), 17u32);
         let _block = block.build();
         Ok(())
     }
@@ -465,17 +560,17 @@ mod test {
             paste::item! {
                 #[test]
                 pub fn [<test_block_builder_ $implementor>]() {
-                    let mut block: BlockBuilder<$implementor> = BlockBuilder::new(SqlType::Scalar(ScalarType::Int), 10);
+                    let mut block: BlockBuilder = BlockBuilder::new(SqlType::Scalar(ScalarType::Int), 10);
                     block.append(12 as $implementor);
                     block.append_null();
                     block.append_null();
                     block.append_null();
                     block.append(15 as $implementor);
-                    assert_eq!(*block.get(0).unwrap().unwrap(), 12 as $implementor);
-                    assert!(block.get(1).unwrap().is_none());
-                    assert!(block.get(2).unwrap().is_none());
-                    assert!(block.get(3).unwrap().is_none());
-                    assert_eq!(*block.get(4).unwrap().unwrap(), 15 as $implementor);
+                    assert_eq!(*block.get::<$implementor>(0).unwrap().unwrap(), 12 as $implementor);
+                    assert!(block.get::<$implementor>(1).unwrap().is_none());
+                    assert!(block.get::<$implementor>(2).unwrap().is_none());
+                    assert!(block.get::<$implementor>(3).unwrap().is_none());
+                    assert_eq!(*block.get::<$implementor>(4).unwrap().unwrap(), 15 as $implementor);
                 }
             }
         }
@@ -487,4 +582,15 @@ mod test {
     test_block_type!(u16);
     test_block_type!(u32);
     test_block_type!(u64);
+
+    #[test]
+    fn test_block_size() {
+        let mut builder = BlockBuilder::new(SqlType::Scalar(ScalarType::Int), 0);
+        builder.append(1u32);
+        let block = builder.build();
+        assert_eq!(22, block.size_in_bytes());
+    }
+
+    #[test]
+    fn test_page_builder_size() {}
 }
