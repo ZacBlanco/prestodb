@@ -1,8 +1,9 @@
-use crate::exec_resources::{AppState, MemoryPoolAssignmentsRequest, TaskManager};
+use crate::exec_resources::{AppState, MemoryPoolAssignmentsRequest};
 use crate::protocol::resources::{
     Duration, MemoryPoolId, NodeStatus, OutputBufferId, ServerInfo, TaskId, TaskUpdateRequest,
 };
 
+use actix_web::http::header::ContentEncoding;
 use actix_web::{delete, get, head, post, put, web, Error, HttpResponse};
 use log::{debug, error};
 use serde::{Deserialize, Serialize};
@@ -133,6 +134,7 @@ async fn post_task(
     let info = state
         .task_manager
         .update_task(&task_id.0, rq.unwrap(), params.summarize.is_some())
+        .await
         .map_err(actix_web::error::ErrorBadRequest)?;
     Ok(HttpResponse::Ok().json(info))
 }
@@ -198,37 +200,78 @@ const PRESTO_PREFIX_URL: &str = "X-Presto-Prefix-Url";
 
 #[get("/task/async/{task_id}/results/{buffer_id}/{token}")]
 async fn data_plane_get_buffer_token(
-    _state: web::Data<AppState>,
+    state: web::Data<AppState>,
     params: web::Path<(TaskId, OutputBufferId, i64)>,
 ) -> Response {
-    let (_taskid, _buffer, _token) = params.as_ref();
-    let task = timeout(std::time::Duration::from_secs(1), async {
-        let var_name: Result<(), ()> = Err(());
-        var_name
+    let (taskid, buffer_id, token) = params.into_inner();
+    let task = timeout(std::time::Duration::from_secs(5), async {
+        state
+            .task_manager
+            .get_task(&taskid)
+            .value()
+            .get_result(buffer_id, token as u64)
+            .await
     });
     match task.await {
         Ok(result) => match result {
-            Ok(_) => Ok(HttpResponse::Ok()
-                .content_type(PRESTO_PAGES_CONTENT_TYPE)
-                .append_header((PRESTO_TASK_INSTANCE_ID, ""))
-                .append_header((PRESTO_PAGE_TOKEN, ""))
-                .append_header((PRESTO_PAGE_NEXT_TOKEN, ""))
-                .append_header((PRESTO_BUFFER_COMPLETE, ""))
-                .finish()),
-            Err(_) => Ok(HttpResponse::InternalServerError()
-                .json("Failed to retrieve buffer result".to_string())),
+            Ok(buffer_result) => {
+                let mut response = HttpResponse::Ok();
+                response
+                    .insert_header(ContentEncoding::Identity)
+                    .content_type(PRESTO_PAGES_CONTENT_TYPE)
+                    .append_header((PRESTO_TASK_INSTANCE_ID, format!("{}", taskid)))
+                    .append_header((PRESTO_PAGE_TOKEN, token))
+                    .append_header((PRESTO_PAGE_NEXT_TOKEN, buffer_result.next_token()))
+                    .append_header((
+                        PRESTO_BUFFER_COMPLETE,
+                        format!("{}", buffer_result.finished()),
+                    ));
+                Ok(response.body(buffer_result.serialize()))
+            }
+            Err(e) => {
+                error!("Failed to retrieve buffer result: {:?}", e);
+                Ok(HttpResponse::InternalServerError().finish())
+            }
         },
-        Err(e) => Ok(HttpResponse::InternalServerError()
-            .json(format!("Timeout retrieving result after {} ", e))),
+        Err(e) => {
+            error!("timeout retrieving buffer result: {:?}", e);
+            Ok(HttpResponse::RequestTimeout().finish())
+        }
     }
 }
 
-#[get("/task/async/{task_id}/results/{buffer_id}/{token}/acknowledge")]
-async fn data_plane_get_buffer_token_ack() -> Response {
-    Ok(HttpResponse::NotImplemented().finish())
+#[get("/task/{task_id}/results/{buffer_id}/{token}/acknowledge")]
+async fn data_plane_get_buffer_token_ack(
+    state: web::Data<AppState>,
+    params: web::Path<(TaskId, OutputBufferId, i64)>,
+) -> Response {
+    let (taskid, buffer_id, token) = params.into_inner();
+    if let Err(e) = state
+        .task_manager
+        .get_task(&taskid)
+        .value()
+        .ack_result(buffer_id.clone(), token as u64)
+        .await
+    {
+        return Ok(HttpResponse::InternalServerError().json(format!(
+            "Failed to ack buffer at {}/results/{:?}/{}/acknowledge: {:?}",
+            taskid, buffer_id, token, e
+        )));
+    }
+    Ok(HttpResponse::Ok().finish())
 }
 
-#[delete("/task/async/{task_id}/results/{buffer_id}/{token}")]
-async fn data_plane_delete_buffer_token() -> Response {
-    Ok(HttpResponse::NotImplemented().finish())
+#[delete("/task/{task_id}/results/{buffer_id}")]
+async fn data_plane_delete_buffer_token(
+    state: web::Data<AppState>,
+    params: web::Path<(TaskId, OutputBufferId)>,
+) -> Response {
+    let (taskid, buffer_id) = params.into_inner();
+    state
+        .task_manager
+        .get_task(&taskid)
+        .value()
+        .delete_buffer(buffer_id)
+        .await;
+    Ok(HttpResponse::Ok().finish())
 }

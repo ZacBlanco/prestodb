@@ -1,7 +1,10 @@
-use crate::protocol::page::Block;
+use crate::protocol::page::BlockBuilder;
 use crate::protocol::page::Page;
+use crate::protocol::page::PageBuilder;
+use crate::protocol::page::SerializedPage;
 use crate::protocol::resources::PlanNode;
 
+use crate::protocol::resources::RowExpression::ConstantExpression;
 use crate::protocol::resources::ScheduledSplit;
 use crate::spi::ConnectorPageSource;
 use std::fmt::Debug;
@@ -10,6 +13,7 @@ use std::ops::Deref;
 use std::sync::Arc;
 
 use anyhow::anyhow;
+use anyhow::Error;
 use anyhow::Result;
 use async_trait::async_trait;
 use log::debug;
@@ -19,6 +23,7 @@ use log::warn;
 use tokio::sync::mpsc::channel;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::mpsc::Sender;
+use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::Mutex;
 use tokio::sync::RwLock;
 
@@ -219,30 +224,45 @@ impl SourceOperator for PrestoQueryOperator {
         let new_post = self.post_office.read().await.clone();
         let new_node = self.node.clone();
         let result = match new_node.as_ref() {
-            PlanNode::ValuesNode {
-                location: _,
-                id: _,
-                outputVariables: _,
-                rows,
-                valuesNodeLabel: _,
-            } => {
+            PlanNode::ValuesNode { rows, .. } => {
                 let blocks = rows
                     .iter()
-                    .map(|row| row.iter().map(|_expr| Block::default()).collect::<Vec<_>>())
-                    .map(|_| Block::default())
-                    .collect::<Vec<_>>();
-                let position_count = blocks.len() as u32;
+                    .map(|row| {
+                        row.iter()
+                            .map(|expr| match expr.as_ref() {
+                                ConstantExpression { valueBlock, .. } => {
+                                    BlockBuilder::try_from(&valueBlock.0)
+                                }
+                                _ => Err(anyhow!("unsupported expression type in Values operator")),
+                            })
+                            .collect::<Result<Vec<_>, Error>>()
+                    })
+                    .reduce(|accumulator, e| match accumulator {
+                        Ok(mut blocks) => match e {
+                            Ok(other_blocks) => {
+                                let ok = blocks
+                                    .iter_mut()
+                                    .zip(other_blocks)
+                                    .map(|(initial, other)| initial.extend(other))
+                                    .collect::<Result<Vec<_>, _>>();
+                                ok.map(|_| blocks)
+                            }
+                            err => err,
+                        },
+                        err => err,
+                    });
+                let blocks = blocks.unwrap_or(Ok(vec![]))?;
+                // let blocks: Vec<_> = blocks.into_iter().map(BlockBuilder::build).collect();
+                let mut pg = PageBuilder::new();
+                for block in blocks {
+                    if let Err(e) = pg.add_channel(block) {
+                        warn!("failed to build page from values blocks: {:?}", e);
+                    }
+                }
                 tokio::spawn(async move {
-                    let page = Page {
-                        blocks,
-                        position_count,
-                        size_in_bytes: 0,
-                        retained_size_in_bytes: 0,
-                        logical_size_in_bytes: 0,
-                    };
                     match new_post {
                         Some(chan) => {
-                            if let Err(e) = chan.send(DriverMessage::Input(page)).await {
+                            if let Err(e) = chan.send(DriverMessage::Input(pg.build())).await {
                                 warn!("ValuesNode failed to send to next op: {:?}", e);
                             }
                         }
@@ -305,11 +325,10 @@ impl DriverX {
         })
     }
 
-    pub async fn start(&self) {
+    pub async fn start(&self, output_buffer: UnboundedSender<SerializedPage>) -> Result<()> {
         debug!("executing plan: {:#?}", self.graph);
         if self.source_operator.is_none() {
-            warn!("no source operator found for execution");
-            return;
+            return Err(anyhow!("no source operator found for execution"));
         }
         let source_op = self.source_operator.as_ref().unwrap().clone();
         let start_handle = tokio::spawn(async move { source_op.start().await });
@@ -321,15 +340,22 @@ impl DriverX {
             }
         }
 
-
         loop {
             match self.mailbox.lock().await.recv().await {
                 Some(DriverMessage::Finished) => {
                     debug!("Final execution should be done soon");
                 }
-                Some(page_result) => {
-                    debug!("output: {:?}", page_result);
-                }
+                Some(DriverMessage::Input(page)) => match SerializedPage::try_from(page) {
+                    Ok(page) => {
+                        if let Err(e) = output_buffer.send(page) {
+                            warn!("driver failed send page to output buffers: {:?}", e);
+                        }
+                    }
+                    Err(e) => {
+                        return Err(anyhow!("Failed to serialize page: {:?}", e));
+                    }
+                },
+                Some(output) => warn!("output driver received unhandled message {:?}", output),
                 None => {
                     debug!("mailbox finished");
                     break;
@@ -344,5 +370,6 @@ impl DriverX {
         );
         let _r = futures::future::join_all(drivers).await;
         debug!("Finished awaiting driver executions");
+        Ok(())
     }
 }

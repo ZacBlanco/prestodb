@@ -48,10 +48,6 @@
             <scope>test</scope>
             <exclusions>
                 <exclusion>
-                    <groupId>com.facebook.presto.hive</groupId>
-                    <artifactId>hive-apache</artifactId>
-                </exclusion>
-                <exclusion>
                     <groupId>com.github.ben-manes.caffeine</groupId>
                     <artifactId>caffeine</artifactId>
                 </exclusion>
@@ -87,11 +83,15 @@
                         <ignoredResourcePattern>parquet.thrift</ignoredResourcePattern>
                         <ignoredResourcePattern>iceberg-build.properties</ignoredResourcePattern>
                         <ignoredResourcePattern>about.html</ignoredResourcePattern>
+                        <ignoredResourcePattern>org.apache.avro.data/Json.avsc</ignoredResourcePattern>
                         <ignoredResourcePattern>mozilla/public-suffix-list.txt</ignoredResourcePattern>
                     </ignoredResourcePatterns>
                     <ignoredClassPatterns>
                         <ignoredClassPattern>module-info</ignoredClassPattern>
                         <ignoredClassPattern>META-INF.versions.9.module-info</ignoredClassPattern>
+                        <ignoredClassPattern>org.apache.avro.*</ignoredClassPattern>
+                        <ignoredClassPattern>org.apache.parquet.*</ignoredClassPattern>
+                        <ignoredClassPattern>com.github.benmanes.caffeine.*</ignoredClassPattern>
                     </ignoredClassPatterns>
                 </configuration>
             </plugin>
