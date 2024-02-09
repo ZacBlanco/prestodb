@@ -326,29 +326,27 @@ impl LocalTaskManager {
         }
     }
 
-    fn get_task(&self, id: &TaskId) -> Entry<'_, TaskId, SqlTask> {
+    pub fn get_task(&self, id: &TaskId) -> Entry<'_, TaskId, SqlTask> {
         self.tasks
             .get_or_insert_with(id.clone(), || SqlTask::new(id, self.node_info.as_ref()))
     }
-}
 
-impl TaskManager for LocalTaskManager {
-    fn get_all_task_info(&self, summarize: bool) -> Vec<TaskInfo> {
+    pub fn get_all_task_info(&self, summarize: bool) -> Vec<TaskInfo> {
         self.tasks
             .iter()
             .map(|x| x.value().get_task_info(summarize))
             .collect::<Vec<_>>()
     }
 
-    fn get_task_info(&self, id: &TaskId, summarize: bool) -> TaskInfo {
+    pub fn get_task_info(&self, id: &TaskId, summarize: bool) -> TaskInfo {
         self.get_task(id).value().get_task_info(summarize)
     }
 
-    fn get_task_status(&self, id: &TaskId) -> TaskStatus {
+    pub fn get_task_status(&self, id: &TaskId) -> TaskStatus {
         self.get_task(id).value().get_task_status()
     }
 
-    fn update_task(
+    pub async fn update_task(
         &self,
         id: &TaskId,
         request: TaskUpdateRequest,
@@ -357,11 +355,12 @@ impl TaskManager for LocalTaskManager {
         Ok(self
             .get_task(id)
             .value()
-            .update(request)?
+            .update(request)
+            .await?
             .get_task_info(summarize))
     }
 
-    fn get_task_status_future(
+    pub fn get_task_status_future(
         &self,
         _task: &TaskId,
         _current_state: TaskState,
@@ -369,18 +368,18 @@ impl TaskManager for LocalTaskManager {
         todo!()
     }
 
-    fn get_task_instance_id(&self, _task: TaskId) -> String {
+    pub fn get_task_instance_id(&self, _task: TaskId) -> String {
         todo!()
     }
 
-    fn abort_task(&self, task: &TaskId, summarize: bool) -> TaskInfo {
+    pub fn abort_task(&self, task: &TaskId, summarize: bool) -> TaskInfo {
         let binding = self.get_task(task);
         let task = binding.value();
         task.abort();
         task.get_task_info(summarize)
     }
 
-    fn cancel_task(&self, task: &TaskId, summarize: bool) -> TaskInfo {
+    pub fn cancel_task(&self, task: &TaskId, summarize: bool) -> TaskInfo {
         let binding = self.get_task(task);
         let task = binding.value();
         task.cancel();
