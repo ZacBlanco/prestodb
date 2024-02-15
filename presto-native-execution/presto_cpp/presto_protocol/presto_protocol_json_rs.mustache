@@ -41,7 +41,7 @@ pub struct DataSize(pub i64);
 
 
 #[derive(Clone, Debug, Serialize, Deserialize, Hash, Eq, PartialEq, PartialOrd, Ord)]
-pub struct Type(String);
+pub struct Type(pub String);
 //#[derive(Clone, Debug, Serialize, Deserialize, Hash, Eq, PartialEq, PartialOrd, Ord)]
 // pub enum Type {
 //     Parametric { inner: Box<Type> },
@@ -144,8 +144,12 @@ pub struct HostAddress;
 #[derive(Clone, Debug, Serialize, Deserialize, Hash, Eq, PartialEq, PartialOrd, Ord)]
 pub struct PlanFragmentId(pub String);
 
-#[derive(Clone, Debug, Serialize, Deserialize, Hash, Eq, PartialEq, PartialOrd, Ord)]
-pub struct QualifiedObjectName;
+#[derive(Clone, Debug, Hash, Eq, PartialEq, PartialOrd, Ord)]
+pub struct QualifiedObjectName {
+    pub catalog_name: String,
+    pub schema_name: String,
+    pub object_name: String,
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize, Hash, Eq, PartialEq, PartialOrd, Ord)]
 pub struct SqlFunctionId;

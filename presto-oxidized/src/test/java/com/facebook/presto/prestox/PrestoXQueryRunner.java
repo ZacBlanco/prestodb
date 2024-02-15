@@ -11,6 +11,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package com.facebook.presto.prestox;
 
 import com.facebook.airlift.log.Logger;
@@ -23,6 +24,7 @@ import com.facebook.presto.tests.DistributedQueryRunner;
 import com.facebook.presto.tpch.TpchPlugin;
 import com.google.common.collect.ImmutableMap;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -30,6 +32,7 @@ import java.nio.file.Paths;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.function.Function;
 
 import static com.facebook.airlift.log.Level.WARN;
 import static com.facebook.presto.iceberg.CatalogType.HADOOP;
@@ -66,8 +69,15 @@ public class PrestoXQueryRunner
             }
             log.info("Temp directory for Worker #%d: %s", idx, tempDirectoryPath.toString());
             int port = 1234 + idx;
-            String binaryPath = Paths.get(System.getProperty("user.dir")).resolve("presto-oxidized/prestox/target/debug/server").toFile().toString();
-            ProcessBuilder builder = new ProcessBuilder(binaryPath);
+
+            Function<String, File> pathFunction = (extra) -> Paths.get(System.getProperty("user.dir") + extra).resolve("prestox/target/debug/server").toFile();
+            // intellij uses different working directories
+            File binaryPath = pathFunction.apply("");
+            if (!binaryPath.exists()) {
+                binaryPath = pathFunction.apply("/presto-oxidized");
+            }
+
+            ProcessBuilder builder = new ProcessBuilder(binaryPath.toString());
             builder.inheritIO();
             Map<String, String> env = builder.environment();
             env.put("PRESTOX_DISCOVERY_URI", discoveryUri.toString());
@@ -108,7 +118,7 @@ public class PrestoXQueryRunner
     {
         Logging.initialize();
         Object wait = new Object();
-        try (DistributedQueryRunner queryRunner = createQueryRunner(OptionalInt.of(0), OptionalInt.of(8080))) {
+        try (DistributedQueryRunner queryRunner = createQueryRunner(OptionalInt.of(1), OptionalInt.of(8080))) {
             log.info("======== SERVER STARTED ========");
             log.info("====\n%s\n====", queryRunner.getCoordinator().getBaseUrl());
             synchronized (wait) {

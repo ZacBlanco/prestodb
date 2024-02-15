@@ -590,7 +590,4 @@ mod test {
         let block = builder.build();
         assert_eq!(22, block.size_in_bytes());
     }
-
-    #[test]
-    fn test_page_builder_size() {}
 }
