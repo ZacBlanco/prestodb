@@ -2,8 +2,8 @@ use std::collections::{BTreeMap, HashSet};
 
 use super::resources::{
     Assignments, BufferState, ConnectorId, DataSize, DateTime, Lifespan, MetadataUpdates,
-    OutputBufferInfo, PlanNode, RowExpression, RuntimeStats, ScheduledSplit, TaskId, TaskSource,
-    TaskStats,
+    OutputBufferInfo, PlanNode, QualifiedObjectName, RowExpression, RuntimeStats, ScheduledSplit,
+    TaskId, TaskSource, TaskStats,
 };
 use chrono::Utc;
 use log::warn;
@@ -522,9 +522,63 @@ impl Assignments {
     }
 }
 
+impl Serialize for QualifiedObjectName {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(
+            format!(
+                "{}.{}.{}",
+                self.catalog_name, self.schema_name, self.object_name
+            )
+            .as_str(),
+        )
+    }
+}
+
+impl<'de> Deserialize<'de> for QualifiedObjectName {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        deserializer.deserialize_str(QualifiedObjectNameDeserializer)
+    }
+}
+
+struct QualifiedObjectNameDeserializer;
+
+impl<'de> Visitor<'de> for QualifiedObjectNameDeserializer {
+    type Value = QualifiedObjectName;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("expected a \".\" separated string with 3 parts")
+    }
+
+    fn visit_borrowed_str<E>(self, v: &'de str) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        let parts = v.split(".").collect::<Vec<_>>();
+        if parts.len() != 3 {
+            return Err(E::custom("3 parts . delimited string expected"));
+        }
+        Ok(QualifiedObjectName {
+            catalog_name: parts[0].to_string(),
+            schema_name: parts[1].to_string(),
+            object_name: parts[2].to_string(),
+        })
+    }
+}
+
 #[cfg(test)]
 mod test {
-    use crate::protocol::resources::{ConnectorId, Lifespan, TaskId};
+    use std::collections::BTreeMap;
+
+    use crate::protocol::resources::{
+        Base64Encoded, Block, ConnectorId, Lifespan, NodeSelectionStrategy, QualifiedObjectName,
+        TaskId, Type, ValueEntry,
+    };
 
     #[test]
     fn test_task_id_serialization() {
@@ -571,5 +625,36 @@ mod test {
             Lifespan(true, 100),
             serde_json::from_str(&serde_json::to_string(&Lifespan(true, 100)).unwrap()).unwrap()
         );
+    }
+
+    #[test]
+    fn test_qualified_object_name() {
+        let obj = QualifiedObjectName {
+            catalog_name: "catalog".to_string(),
+            schema_name: "schema".to_string(),
+            object_name: "$something".to_string(),
+        };
+        let result =
+            serde_json::from_str::<QualifiedObjectName>(&serde_json::to_string(&obj).unwrap())
+                .unwrap();
+        assert_eq!(obj.catalog_name, result.catalog_name);
+        assert_eq!(obj.schema_name, result.schema_name);
+        assert_eq!(obj.object_name, result.object_name);
+    }
+
+    // this is just to test how the serde handles complex non-string types.
+    // (hint: it doesn't)
+    #[ignore]
+    #[test]
+    fn test_map_serialization() {
+        let mut map = BTreeMap::new();
+        map.insert(
+            ValueEntry {
+                prestoType: Type("test".to_string()),
+                block: Block(Base64Encoded("abc123".to_string())),
+            },
+            NodeSelectionStrategy::HARD_AFFINITY,
+        );
+        println!("{}", serde_json::to_string_pretty(&map).unwrap());
     }
 }
