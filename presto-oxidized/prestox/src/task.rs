@@ -15,7 +15,7 @@ use bytes::{BufMut, Bytes, BytesMut};
 use ordered_float::OrderedFloat;
 
 use chrono::Utc;
-use log::debug;
+use log::{debug, error};
 
 use tokio::{
     sync::{
@@ -328,6 +328,13 @@ impl SqlTask {
     }
 
     pub async fn update(&self, request: TaskUpdateRequest) -> Result<&Self> {
+        if let Err(e) = TryInto::<PlanFragment>::try_into(request.fragment.as_ref().unwrap()) {
+            error!(
+                "Failed to deserialize JSON Plan: {:?}",
+                request.fragment.as_ref().unwrap()
+            );
+            return Err(e);
+        }
         let plan: PlanFragment = (&(request.fragment.unwrap())).try_into()?;
         let driver = DriverX::new(Arc::new(*plan.root))?;
         let state_machine = self.task_state_machine.clone();

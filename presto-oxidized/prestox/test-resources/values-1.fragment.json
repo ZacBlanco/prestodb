@@ -1,0 +1,110 @@
+{
+  "id": "0",
+  "root": {
+    "@type": ".OutputNode",
+    "sourceLocation": {
+      "line": 1,
+      "column": 16
+    },
+    "id": "7",
+    "source": {
+      "@type": ".ValuesNode",
+      "id": "0",
+      "outputVariables": [
+        {
+          "@type": "variable",
+          "sourceLocation": {
+            "line": 1,
+            "column": 16
+          },
+          "name": "field",
+          "type": "integer"
+        }
+      ],
+      "rows": [
+        [
+          {
+            "@type": "constant",
+            "valueBlock": "CQAAAElOVF9BUlJBWQEAAAAAAQAAAA==",
+            "type": "integer"
+          }
+        ]
+      ],
+      "sourceLocation": {
+        "line": 1,
+        "column": 16
+      }
+    },
+    "columnNames": [
+      "_col0"
+    ],
+    "outputVariables": [
+      {
+        "@type": "variable",
+        "sourceLocation": {
+          "line": 1,
+          "column": 1
+        },
+        "name": "field",
+        "type": "integer"
+      }
+    ]
+  },
+  "variables": [
+    {
+      "@type": "variable",
+      "sourceLocation": {
+        "line": 1,
+        "column": 1
+      },
+      "name": "field",
+      "type": "integer"
+    }
+  ],
+  "partitioning": {
+    "connectorHandle": {
+      "@type": "$remote",
+      "partitioning": "SINGLE",
+      "function": "SINGLE"
+    }
+  },
+  "tableScanSchedulingOrder": [],
+  "partitioningScheme": {
+    "partitioning": {
+      "handle": {
+        "connectorHandle": {
+          "@type": "$remote",
+          "partitioning": "SINGLE",
+          "function": "SINGLE"
+        }
+      },
+      "arguments": []
+    },
+    "outputLayout": [
+      {
+        "@type": "variable",
+        "sourceLocation": {
+          "line": 1,
+          "column": 1
+        },
+        "name": "field",
+        "type": "integer"
+      }
+    ],
+    "replicateNullsAndAny": false,
+    "bucketToPartition": [
+      0
+    ]
+  },
+  "stageExecutionDescriptor": {
+    "stageExecutionStrategy": "UNGROUPED_EXECUTION",
+    "groupedExecutionScanNodes": [],
+    "totalLifespans": 1
+  },
+  "outputTableWriterFragment": false,
+  "statsAndCosts": {
+    "stats": {},
+    "costs": {}
+  },
+  "jsonRepresentation": "{\n  \"id\" : \"7\",\n  \"name\" : \"Output\",\n  \"identifier\" : \"[_col0]\",\n  \"details\" : \"_col0 := field (1:1)\\n\",\n  \"children\" : [ {\n    \"id\" : \"0\",\n    \"name\" : \"Values\",\n    \"identifier\" : \"\",\n    \"details\" : \"(INTEGER'1')\\n\",\n    \"children\" : [ ],\n    \"remoteSources\" : [ ],\n    \"estimates\" : [ {\n      \"outputRowCount\" : \"NaN\",\n      \"totalSize\" : \"NaN\",\n      \"confident\" : false,\n      \"variableStatistics\" : { },\n      \"joinNodeStatsEstimate\" : {\n        \"nullJoinBuildKeyCount\" : \"NaN\",\n        \"joinBuildKeyCount\" : \"NaN\",\n        \"nullJoinProbeKeyCount\" : \"NaN\",\n        \"joinProbeKeyCount\" : \"NaN\"\n      },\n      \"tableWriterNodeStatsEstimate\" : {\n        \"taskCountIfScaledWriter\" : \"NaN\"\n      },\n      \"partialAggregationStatsEstimate\" : {\n        \"inputBytes\" : \"NaN\",\n        \"outputBytes\" : \"NaN\",\n        \"inputRowCount\" : \"NaN\",\n        \"outputRowCount\" : \"NaN\"\n      }\n    } ]\n  } ],\n  \"remoteSources\" : [ ],\n  \"estimates\" : [ {\n    \"outputRowCount\" : \"NaN\",\n    \"totalSize\" : \"NaN\",\n    \"confident\" : false,\n    \"variableStatistics\" : { },\n    \"joinNodeStatsEstimate\" : {\n      \"nullJoinBuildKeyCount\" : \"NaN\",\n      \"joinBuildKeyCount\" : \"NaN\",\n      \"nullJoinProbeKeyCount\" : \"NaN\",\n      \"joinProbeKeyCount\" : \"NaN\"\n    },\n    \"tableWriterNodeStatsEstimate\" : {\n      \"taskCountIfScaledWriter\" : \"NaN\"\n    },\n    \"partialAggregationStatsEstimate\" : {\n      \"inputBytes\" : \"NaN\",\n      \"outputBytes\" : \"NaN\",\n      \"inputRowCount\" : \"NaN\",\n      \"outputRowCount\" : \"NaN\"\n    }\n  } ]\n}"
+}
