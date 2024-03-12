@@ -104,6 +104,8 @@ language = {
                 "VariableReferenceExpression": "RowExpression",
                 "HiveColumnHandle": "ColumnHandle",
                 "TpchTableHandle": "ConnectorTableHandle",
+                "IcebergTableHandle": "ConnectorTableHandle",
+                "IcebergColumnHandle": "ColumnHandle",
                 "CallExpression": "RowExpression",
                 r"^type$": "prestoType",
                 "self": "selfVar",

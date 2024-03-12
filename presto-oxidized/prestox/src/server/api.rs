@@ -198,7 +198,7 @@ const PRESTO_BUFFER_COMPLETE: &str = "X-Presto-Buffer-Complete";
 #[allow(unused)]
 const PRESTO_PREFIX_URL: &str = "X-Presto-Prefix-Url";
 
-#[get("/task/async/{task_id}/results/{buffer_id}/{token}")]
+#[get("/task/{task_id}/results/{buffer_id}/{token}")]
 async fn data_plane_get_buffer_token(
     state: web::Data<AppState>,
     params: web::Path<(TaskId, OutputBufferId, i64)>,
