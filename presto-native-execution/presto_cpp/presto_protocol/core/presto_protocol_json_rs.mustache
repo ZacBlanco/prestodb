@@ -16,6 +16,7 @@ pub type Integer = i32;
 pub type Double = f64;
 pub type Long = i64;
 pub type Short = i16;
+pub type Boolean = bool;
 pub type Map<K, V> = std::collections::BTreeMap<K, V>;
 pub type List<T> = Vec<T>;
 
@@ -129,8 +130,8 @@ pub struct HiveType;
 #[derive(Clone, Debug, Serialize, Deserialize, Hash, Eq, PartialEq, PartialOrd, Ord)]
 pub struct TypeSignature(pub String);
 
-#[derive(Clone, Debug, Serialize, Deserialize, Hash, Eq, PartialEq, PartialOrd, Ord)]
-pub struct ColumnType;
+//#[derive(Clone, Debug, Serialize, Deserialize, Hash, Eq, PartialEq, PartialOrd, Ord)]
+//pub struct ColumnType;
 
 #[derive(Clone, Debug, Serialize, Deserialize, Hash, Eq, PartialEq, PartialOrd, Ord)]
 pub struct Subfield;
