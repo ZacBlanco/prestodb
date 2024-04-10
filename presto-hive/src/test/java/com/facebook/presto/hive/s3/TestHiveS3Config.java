@@ -56,7 +56,7 @@ public class TestHiveS3Config
                 .setS3ConnectTimeout(new Duration(5, TimeUnit.SECONDS))
                 .setS3SocketTimeout(new Duration(5, TimeUnit.SECONDS))
                 .setS3MultipartMinFileSize(new DataSize(16, Unit.MEGABYTE))
-                .setS3MultipartMinPartSize(new DataSize(5, Unit.MEGABYTE))
+                .setS3MultipartMinPartSize(new DataSize(10, Unit.MEGABYTE))
                 .setS3MaxConnections(500)
                 .setS3StagingDirectory(new File(StandardSystemProperty.JAVA_IO_TMPDIR.value()))
                 .setPinS3ClientToCurrentRegion(false)

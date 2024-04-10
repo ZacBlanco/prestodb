@@ -13,11 +13,14 @@
  */
 package com.facebook.presto.hive;
 
+import com.facebook.presto.hive.filesystem.S3UploadConfigDynamicConfigurationProvider;
 import com.google.inject.Binder;
 import com.google.inject.Module;
 import com.google.inject.Scopes;
+import com.google.inject.multibindings.Multibinder;
 
 import static com.facebook.airlift.configuration.ConfigBinder.configBinder;
+import static com.google.inject.multibindings.Multibinder.newSetBinder;
 
 public class HiveCommonModule
         implements Module
@@ -27,5 +30,7 @@ public class HiveCommonModule
     {
         configBinder(binder).bindConfig(HiveCommonClientConfig.class);
         binder.bind(HiveCommonSessionProperties.class).in(Scopes.SINGLETON);
+        Multibinder<DynamicConfigurationProvider> setBinder = newSetBinder(binder, DynamicConfigurationProvider.class);
+        setBinder.addBinding().to(S3UploadConfigDynamicConfigurationProvider.class).in(Scopes.SINGLETON);
     }
 }

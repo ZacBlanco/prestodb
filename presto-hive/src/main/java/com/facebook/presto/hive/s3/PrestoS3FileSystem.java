@@ -35,11 +35,16 @@ import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3Builder;
 import com.amazonaws.services.s3.AmazonS3Client;
 import com.amazonaws.services.s3.AmazonS3EncryptionClient;
+import com.amazonaws.services.s3.model.AbortMultipartUploadRequest;
 import com.amazonaws.services.s3.model.AmazonS3Exception;
 import com.amazonaws.services.s3.model.CannedAccessControlList;
+import com.amazonaws.services.s3.model.CompleteMultipartUploadRequest;
 import com.amazonaws.services.s3.model.EncryptionMaterialsProvider;
 import com.amazonaws.services.s3.model.GetObjectRequest;
+import com.amazonaws.services.s3.model.InitiateMultipartUploadRequest;
+import com.amazonaws.services.s3.model.InitiateMultipartUploadResult;
 import com.amazonaws.services.s3.model.KMSEncryptionMaterialsProvider;
+import com.amazonaws.services.s3.model.ListMultipartUploadsRequest;
 import com.amazonaws.services.s3.model.ListObjectsRequest;
 import com.amazonaws.services.s3.model.ObjectListing;
 import com.amazonaws.services.s3.model.ObjectMetadata;
@@ -48,10 +53,12 @@ import com.amazonaws.services.s3.model.S3ObjectInputStream;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
 import com.amazonaws.services.s3.model.SSEAwsKeyManagementParams;
 import com.amazonaws.services.s3.model.StorageClass;
-import com.amazonaws.services.s3.transfer.Transfer;
+import com.amazonaws.services.s3.model.UploadPartRequest;
+import com.amazonaws.services.s3.model.UploadPartResult;
 import com.amazonaws.services.s3.transfer.TransferManager;
 import com.amazonaws.services.s3.transfer.TransferManagerBuilder;
 import com.amazonaws.services.s3.transfer.Upload;
+import com.amazonaws.services.s3.transfer.model.UploadResult;
 import com.facebook.airlift.log.Logger;
 import com.facebook.presto.hive.filesystem.ExtendedFileSystem;
 import com.google.common.annotations.VisibleForTesting;
@@ -90,6 +97,7 @@ import java.io.UncheckedIOException;
 import java.net.URI;
 import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
@@ -98,6 +106,7 @@ import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Stream;
 
 import static com.amazonaws.regions.Regions.US_EAST_1;
 import static com.amazonaws.services.s3.Headers.SERVER_SIDE_ENCRYPTION;
@@ -435,14 +444,14 @@ public class PrestoS3FileSystem
         if (!stagingDirectory.isDirectory()) {
             throw new IOException("Configured staging path is not a directory: " + stagingDirectory);
         }
-        File tempFile = createTempFile(stagingDirectory.toPath(), "presto-s3-", ".tmp").toFile();
+        File tempDir = Files.createTempDirectory(stagingDirectory.toPath(), "presto-s3-tmp").toFile();
 
         String key = keyFromPath(qualifiedPath(path));
         return new FSDataOutputStream(
                 new PrestoS3OutputStream(s3,
                         getBucketName(uri),
                         key,
-                        tempFile,
+                        tempDir,
                         sseEnabled,
                         sseType,
                         sseKmsKeyId,
@@ -550,7 +559,8 @@ public class PrestoS3FileSystem
         return true;
     }
 
-    private enum ListingMode {
+    private enum ListingMode
+    {
         SHALLOW_ALL, // Shallow listing of files AND directories
         SHALLOW_FILES_ONLY,
         RECURSIVE_FILES_ONLY;
@@ -1230,15 +1240,25 @@ public class PrestoS3FileSystem
     private static class PrestoS3OutputStream
             extends FilterOutputStream
     {
-        private final TransferManager transferManager;
+        private final AmazonS3 client;
         private final String host;
         private final String key;
-        private final File tempFile;
+        private final File tempDir;
         private final boolean sseEnabled;
         private final PrestoS3SseType sseType;
         private final String sseKmsKeyId;
         private final CannedAccessControlList aclType;
         private final StorageClass s3StorageClass;
+
+        private java.nio.file.Path partFile;
+        private short currentPart;
+        private final List<UploadPartResult> partList = new ArrayList<>();
+        long currentPartWrittenBytes;
+        private final long minPartUploadFileSize;
+        private final long
+                minPartSize;
+
+        Optional<InitiateMultipartUploadResult> upload = Optional.empty();
 
         private boolean closed;
 
@@ -1246,7 +1266,7 @@ public class PrestoS3FileSystem
                 AmazonS3 s3,
                 String host,
                 String key,
-                File tempFile,
+                File tempDir,
                 boolean sseEnabled,
                 PrestoS3SseType sseType,
                 String sseKmsKeyId,
@@ -1256,25 +1276,66 @@ public class PrestoS3FileSystem
                 PrestoS3StorageClass s3StorageClass)
                 throws IOException
         {
-            super(new BufferedOutputStream(Files.newOutputStream(requireNonNull(tempFile, "tempFile is null").toPath())));
-
-            transferManager = TransferManagerBuilder.standard()
-                    .withS3Client(requireNonNull(s3, "s3 is null"))
-                    .withMinimumUploadPartSize(multiPartUploadMinPartSize)
-                    .withMultipartUploadThreshold(multiPartUploadMinFileSize).build();
-
+            super(null); // null so we can initialize it with state later
+            minPartSize = multiPartUploadMinPartSize;
+            minPartUploadFileSize = multiPartUploadMinFileSize;
+            client = requireNonNull(s3, "s3 is null");
             requireNonNull(aclType, "aclType is null");
             requireNonNull(s3StorageClass, "s3StorageClass is null");
             this.aclType = aclType.getCannedACL();
             this.host = requireNonNull(host, "host is null");
             this.key = requireNonNull(key, "key is null");
-            this.tempFile = tempFile;
+            this.tempDir = requireNonNull(tempDir, "tempDir is null");
             this.sseEnabled = sseEnabled;
             this.sseType = requireNonNull(sseType, "sseType is null");
             this.sseKmsKeyId = sseKmsKeyId;
             this.s3StorageClass = s3StorageClass.getS3StorageClass();
 
-            log.debug("OutputStream for key '%s' using file: %s", key, tempFile);
+            // this call initializes the OutputStream
+            newTempFileBuffer();
+            log.debug("OutputStream for key '%s' using directory: %s", key, this.tempDir);
+        }
+
+        private void newTempFileBuffer()
+                throws IOException
+        {
+            partFile = requireNonNull(createTempFile(tempDir.toPath(), "part-" + currentPart, ".tmp"), "tempFile is null");
+            currentPart++;
+            currentPartWrittenBytes = 0;
+            out = new BufferedOutputStream(Files.newOutputStream(partFile));
+        }
+
+        @Override
+        public void write(int b)
+                throws IOException
+        {
+            if (currentPartWrittenBytes >= minPartSize) {
+                flushPartUpload(false);
+            }
+            out.write(b);
+            currentPartWrittenBytes += 1;
+        }
+
+        @Override
+        public void write(byte[] b)
+                throws IOException
+        {
+            if (currentPartWrittenBytes >= minPartSize) {
+                flushPartUpload(false);
+            }
+            out.write(b);
+            currentPartWrittenBytes += b.length;
+        }
+
+        @Override
+        public void write(byte[] b, int off, int len)
+                throws IOException
+        {
+            if (currentPartWrittenBytes >= minPartSize) {
+                flushPartUpload(false);
+            }
+            out.write(b, off, len);
+            currentPartWrittenBytes += len;
         }
 
         @Override
@@ -1288,25 +1349,97 @@ public class PrestoS3FileSystem
 
             try {
                 super.close();
-                uploadObject();
+                // if the upload wasn't initiated already, use the AWS transfer manager
+                // otherwise, flush the final part and upload complete the multipart request
+                String etag = upload.map(upload -> {
+                    flushPartUpload(true);
+                    return client.completeMultipartUpload(new CompleteMultipartUploadRequest()
+                            .withBucketName(host)
+                            .withKey(key)
+                            .withPartETags(partList)
+                            .withUploadId(upload.getUploadId())).getETag();
+                }).orElseGet(this::uploadSingleFile);
+                log.debug("Uploaded file to %s with ETag: %s", key, etag);
             }
             finally {
-                if (!tempFile.delete()) {
-                    log.warn("Could not delete temporary file: %s", tempFile);
+                try (Stream<java.nio.file.Path> dirStream = Files.walk(tempDir.toPath())) {
+                    if (!dirStream.map(java.nio.file.Path::toFile)
+                            // deletes all files first, then the directory
+                            .sorted(Comparator.reverseOrder())
+                            .map(File::delete)
+                            .reduce(true, (a, b) -> a && b)) {
+                        log.warn("Failed to delete all files in " + tempDir);
+                    }
                 }
-                // close transfer manager but keep underlying S3 client open
-                transferManager.shutdownNow(false);
             }
         }
 
-        private void uploadObject()
-                throws IOException
+        private void flushPartUpload(boolean last)
         {
             try {
-                log.debug("Starting upload for host: %s, key: %s, file: %s, size: %s", host, key, tempFile, tempFile.length());
+                if (!upload.isPresent()) {
+                    InitiateMultipartUploadRequest request = new InitiateMultipartUploadRequest(host, key)
+                            .withStorageClass(s3StorageClass)
+                            .withCannedACL(aclType);
+                    if (sseEnabled) {
+                        switch (sseType) {
+                            case KMS:
+                                if (sseKmsKeyId != null) {
+                                    request.withSSEAwsKeyManagementParams(new SSEAwsKeyManagementParams(sseKmsKeyId));
+                                }
+                                else {
+                                    request.withSSEAwsKeyManagementParams(new SSEAwsKeyManagementParams());
+                                }
+                                break;
+                            case S3:
+                                ObjectMetadata metadata = new ObjectMetadata();
+                                metadata.setSSEAlgorithm(ObjectMetadata.AES_256_SERVER_SIDE_ENCRYPTION);
+                                request.withObjectMetadata(metadata);
+                                break;
+                        }
+                    }
+                    upload = Optional.of(client.initiateMultipartUpload(request));
+                }
+                InitiateMultipartUploadResult currentUpload = upload.get();
+                out.close();
                 STATS.uploadStarted();
+                UploadPartRequest request = new UploadPartRequest()
+                        .withBucketName(host)
+                        .withKey(key)
+                        .withFile(partFile.toFile())
+                        .withPartNumber(currentPart)
+                        .withFileOffset(0)
+                        .withLastPart(last)
+                        .withPartSize(partFile.toFile().length())
+                        .withUploadId(currentUpload.getUploadId());
+                if (log.isDebugEnabled()) {
+                    request.withGeneralProgressListener(createProgressListener(partFile.toFile().length()));
+                }
 
-                PutObjectRequest request = new PutObjectRequest(host, key, tempFile);
+                partList.add(client.uploadPart(request));
+                STATS.uploadSuccessful();
+                Files.deleteIfExists(partFile);
+                if (!last) {
+                    newTempFileBuffer();
+                }
+            }
+            catch (Exception e) {
+                STATS.uploadFailed();
+                upload.ifPresent(this::cleanUpFailedMultipartUpload);
+                throw new RuntimeException(e);
+            }
+        }
+
+        private String uploadSingleFile()
+        {
+            TransferManager transfer = TransferManagerBuilder.standard()
+                    .withS3Client(client)
+                    .withMinimumUploadPartSize(minPartSize)
+                    .withMultipartUploadThreshold(minPartUploadFileSize)
+                    .build();
+            try {
+                STATS.uploadStarted();
+                PutObjectRequest request = new PutObjectRequest(host, key, partFile.toFile());
                 if (sseEnabled) {
                     switch (sseType) {
                         case KMS:
@@ -1320,39 +1453,70 @@ public class PrestoS3FileSystem
                         case S3:
                             ObjectMetadata metadata = new ObjectMetadata();
                             metadata.setSSEAlgorithm(ObjectMetadata.AES_256_SERVER_SIDE_ENCRYPTION);
-                            request.setMetadata(metadata);
+                            request.withMetadata(metadata);
                             break;
                     }
                 }
                 request.withStorageClass(s3StorageClass);
-
                 request.withCannedAcl(aclType);
-
-                Upload upload = transferManager.upload(request);
-
+                Upload upload = transfer.upload(request);
                 if (log.isDebugEnabled()) {
-                    upload.addProgressListener(createProgressListener(upload));
+                    upload.addProgressListener(createProgressListener(partFile.toFile().length()));
                 }
-
-                upload.waitForCompletion();
+                UploadResult result = upload.waitForUploadResult();
                 STATS.uploadSuccessful();
-                log.debug("Completed upload for host: %s, key: %s", host, key);
+                return result.getETag();
             }
             catch (AmazonClientException e) {
                 STATS.uploadFailed();
-                throw new IOException(e);
+                throw new RuntimeException(e);
             }
             catch (InterruptedException e) {
                 STATS.uploadFailed();
                 Thread.currentThread().interrupt();
-                throw new InterruptedIOException();
+                throw new RuntimeException(e);
+            }
+            finally {
+                transfer.shutdownNow(false);
             }
         }
 
-        private ProgressListener createProgressListener(Transfer transfer)
+        /**
+         * In the case of errors, make a best-effort to clean up the failed multipart upload. Improperly
+         * aborted uploads can lead to additional S3 costs for "ghost" files. In order to ensure that
+         * everything is properly cleaned up, the ListParts request must return empty.
+         * <br>
+         * See <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_AbortMultipartUpload.html"></a>
+         *
+         * @param currentUpload the original multipart upload request
+         */
+        private void cleanUpFailedMultipartUpload(InitiateMultipartUploadResult currentUpload)
+        {
+            try {
+                while (retry()
+                        // theoretically, listMultipartUploads can return > 1k results, requiring paging to search for the existing upload.
+                        // However, since we filter using the `withPrefix` as the file name, we assume that there won't be > 1000 results.
+                        .run("s3-listMultipartUploads", () -> client.listMultipartUploads(new ListMultipartUploadsRequest(host).withPrefix(key))
+                                .getMultipartUploads().stream().anyMatch(upload -> upload.getUploadId().equals(currentUpload.getUploadId())))) {
+                    retry().run("s3-AbortMultipartUpload", () -> {
+                        client.abortMultipartUpload(new AbortMultipartUploadRequest(host, key, currentUpload.getUploadId()));
+                        return null;
+                    });
+                }
+            }
+            catch (Exception e) {
+                String errMessage = String.format("Failed to abort multipart upload at s3://%s/%s with uploadId: %s. User should manually abort upload to prevent additional S3 costs.", currentUpload.getBucketName(), currentUpload.getKey(), currentUpload.getUploadId());
+                log.error(errMessage);
+                throw new RuntimeException(errMessage, e);
+            }
+        }
+
+        private ProgressListener createProgressListener(long totalSize)
         {
             return new ProgressListener()
             {
+                private final long maxSize = totalSize;
+                private long totalTransferred;
                 private ProgressEventType previousType;
                 private double previousTransferred;
 
@@ -1360,12 +1524,13 @@ public class PrestoS3FileSystem
                 public synchronized void progressChanged(ProgressEvent progressEvent)
                 {
                     ProgressEventType eventType = progressEvent.getEventType();
+                    totalTransferred += progressEvent.getBytesTransferred();
                     if (previousType != eventType) {
                         log.debug("Upload progress event (%s/%s): %s", host, key, eventType);
                         previousType = eventType;
                     }
 
-                    double transferred = transfer.getProgress().getPercentTransferred();
+                    double transferred = (double) totalTransferred / maxSize;
                     if (transferred >= (previousTransferred + 10.0)) {
                         log.debug("Upload percentage (%s/%s): %.0f%%", host, key, transferred);
                         previousTransferred = transferred;
