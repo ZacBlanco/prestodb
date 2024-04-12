@@ -550,7 +550,8 @@ public class PrestoS3FileSystem
         return true;
     }
 
-    private enum ListingMode {
+    private enum ListingMode
+    {
         SHALLOW_ALL, // Shallow listing of files AND directories
         SHALLOW_FILES_ONLY,
         RECURSIVE_FILES_ONLY;
@@ -1275,6 +1276,27 @@ public class PrestoS3FileSystem
             this.s3StorageClass = s3StorageClass.getS3StorageClass();
 
             log.debug("OutputStream for key '%s' using file: %s", key, tempFile);
+        }
+
+        @Override
+        public void write(int data)
+                throws IOException
+        {
+            out.write(data);
+        }
+
+        @Override
+        public void write(byte[] data)
+                throws IOException
+        {
+            out.write(data);
+        }
+
+        @Override
+        public void write(byte[] data, int off, int len)
+                throws IOException
+        {
+            out.write(data, off, len);
         }
 
         @Override
