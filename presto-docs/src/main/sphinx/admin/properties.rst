@@ -828,6 +828,18 @@ Log the stats equivalent plan and canonicalized plans used in history based opti
 Enable analysis and propagation of logical properties like distinct keys or cardinality among the nodes of
 a query plan. The optimizer may then use these properties to perform various optimizations.
 
+``optimizer.use-histograms``
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+    * **Type:** ``boolean``
+    * **Default Value:** ``false``
+
+    Enables the optimizer to use histograms when available to perform cost estimate calculations
+    during query optimization. When set to ``false``, this parameter does not prevent histograms
+    from being collected by ``ANALYZE``, but prevents them from being used during query
+    optimization. This behavior can be controlled on a per-query basis using the
+    ``optimizer_use_histograms`` session property.
+
 Planner Properties
 ------------------
 
