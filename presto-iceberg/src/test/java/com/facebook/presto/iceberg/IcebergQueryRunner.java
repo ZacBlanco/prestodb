@@ -182,7 +182,7 @@ public final class IcebergQueryRunner
             queryRunner.createCatalog("jmx", "jmx");
         }
 
-        if (catalogType == HIVE.name()) {
+        if (catalogType.equals(HIVE.name())) {
             Path icebergDir = icebergDataDirectory
                     .resolve(TEST_DATA_DIRECTORY)
                     .getParent()
