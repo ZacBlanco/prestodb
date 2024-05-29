@@ -193,6 +193,7 @@
         <module>presto-singlestore</module>
         <module>presto-hana</module>
         <module>presto-ui</module>
+        <module>presto-openapi</module>
     </modules>
 
     <dependencyManagement>
