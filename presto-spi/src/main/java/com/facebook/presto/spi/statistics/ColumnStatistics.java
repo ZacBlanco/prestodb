@@ -199,6 +199,11 @@ public final class ColumnStatistics
             return this;
         }
 
+        public Optional<ConnectorHistogram> getHistogram()
+        {
+            return histogram;
+        }
+
         public Builder mergeWith(Builder other)
         {
             if (nullsFraction.isUnknown()) {

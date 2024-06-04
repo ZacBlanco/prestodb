@@ -331,7 +331,7 @@ public class DisjointRangeDomainHistogram
     {
         return toStringHelper(this)
                 .add("source", this.source)
-                .add("rangeSet", this.rangeSet)
+                .add("rangeSet", this.rangeSet.get())
                 .toString();
     }
 
