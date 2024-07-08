@@ -110,7 +110,10 @@ import static com.facebook.presto.common.type.BigintType.BIGINT;
 import static com.facebook.presto.common.type.DateType.DATE;
 import static com.facebook.presto.common.type.DoubleType.DOUBLE;
 import static com.facebook.presto.common.type.IntegerType.INTEGER;
+import static com.facebook.presto.common.type.RealType.REAL;
+import static com.facebook.presto.common.type.TimeType.TIME;
 import static com.facebook.presto.common.type.TimeZoneKey.UTC_KEY;
+import static com.facebook.presto.common.type.TimestampType.TIMESTAMP;
 import static com.facebook.presto.common.type.VarcharType.VARCHAR;
 import static com.facebook.presto.hive.BaseHiveColumnHandle.ColumnType.SYNTHESIZED;
 import static com.facebook.presto.iceberg.FileContent.EQUALITY_DELETES;
@@ -1489,11 +1492,12 @@ public abstract class IcebergDistributedTestBase
                 // {SMALLINT, new String[]{"1", "2", "10"}},
                 // {TIMESTAMP_WITH_TIME_ZONE, new String[]{"now() + interval '1' hour", "now() + interval '2' hour"}},
                 // requires update to Kll sketch function because real are stored as ints but converted to float bits
-                // {REAL, new String[] {"1.0", "2.0", "3.0"}},
+                {REAL, new String[] {"1.0", "2.0", "3.0"}},
                 // iceberg stores microsecond precision but presto calculates on millisecond precision
                 // need a fix to properly convert for the optimizer.
-                // {TIMESTAMP, new String[] {"localtimestamp + interval '1' hour", "localtimestamp + interval '2' hour"}},
-                // {TIME, new String[] {"localtime", "localtime + interval '1' hour"}}
+                {TIMESTAMP, new String[] {"localtimestamp + interval '1' hour", "localtimestamp + interval '2' hour"}},
+                // supported types
+                {TIME, new String[] {"localtime", "localtime + interval '1' hour"}},
                 {INTEGER, new String[] {"1", "5", "9"}},
                 {BIGINT, new String[] {"2", "4", "6"}},
                 {DOUBLE, new String[] {"1.0", "3.1", "4.6"}},
@@ -1509,10 +1513,13 @@ public abstract class IcebergDistributedTestBase
     public void testHistogramStorage(Type type, Object[] values)
     {
         try {
+            Session session = Session.builder(getSession())
+                    .setSystemProperty(OPTIMIZER_USE_HISTOGRAMS, "true")
+                    .build();
             assertQuerySucceeds("DROP TABLE IF EXISTS create_histograms");
             assertQuerySucceeds(String.format("CREATE TABLE create_histograms (c %s)", type.getDisplayName()));
             assertQuerySucceeds(String.format("INSERT INTO create_histograms VALUES %s", Joiner.on(", ").join(values)));
-            assertQuerySucceeds("ANALYZE create_histograms");
+            assertQuerySucceeds(session, "ANALYZE create_histograms");
             TableStatistics tableStatistics = getTableStats("create_histograms");
             Map<String, IcebergColumnHandle> nameToHandle = tableStatistics.getColumnStatistics().keySet()
                     .stream().map(IcebergColumnHandle.class::cast)
@@ -1640,19 +1647,23 @@ public abstract class IcebergDistributedTestBase
         }
     }
 
+    @Test
     public void testAllNullHistogramColumn()
     {
         try {
+            Session session = Session.builder(getSession())
+                    .setSystemProperty(OPTIMIZER_USE_HISTOGRAMS, "true")
+                    .build();
             assertQuerySucceeds("DROP TABLE IF EXISTS histogram_all_nulls");
             assertQuerySucceeds("CREATE TABLE histogram_all_nulls (c bigint)");
-            TableStatistics stats = getTableStats("histogram_all_nulls");
+            TableStatistics stats = getTableStats("histogram_all_nulls", Optional.empty(), session);
             assertFalse(stats.getColumnStatistics().values().stream().findFirst().isPresent());
             assertUpdate("INSERT INTO histogram_all_nulls VALUES NULL, NULL, NULL, NULL, NULL", 5);
-            stats = getTableStats("histogram_all_nulls");
+            stats = getTableStats("histogram_all_nulls", Optional.empty(), session);
             assertFalse(stats.getColumnStatistics().values().stream().findFirst()
                     .get().getHistogram().isPresent());
-            assertQuerySucceeds("ANALYZE histogram_all_nulls");
-            stats = getTableStats("histogram_all_nulls");
+            assertQuerySucceeds(session, "ANALYZE histogram_all_nulls");
+            stats = getTableStats("histogram_all_nulls", Optional.empty(), session);
             assertFalse(stats.getColumnStatistics().values().stream().findFirst()
                     .get().getHistogram().isPresent());
         }
@@ -1665,11 +1676,14 @@ public abstract class IcebergDistributedTestBase
     public void testHistogramShowStats(Type type, Object[] values)
     {
         try {
+            Session session = Session.builder(getSession())
+                    .setSystemProperty(OPTIMIZER_USE_HISTOGRAMS, "true")
+                    .build();
             assertQuerySucceeds("DROP TABLE IF EXISTS create_histograms");
             assertQuerySucceeds(String.format("CREATE TABLE show_histograms (c %s)", type.getDisplayName()));
             assertQuerySucceeds(String.format("INSERT INTO show_histograms VALUES %s", Joiner.on(", ").join(values)));
-            assertQuerySucceeds("ANALYZE show_histograms");
-            TableStatistics tableStatistics = getTableStats("show_histograms");
+            assertQuerySucceeds(session, "ANALYZE show_histograms");
+            TableStatistics tableStatistics = getTableStats("show_histograms", Optional.empty(), session);
             Map<String, Optional<ConnectorHistogram>> histogramByColumnName = tableStatistics.getColumnStatistics()
                     .entrySet()
                     .stream()
@@ -1701,7 +1715,7 @@ public abstract class IcebergDistributedTestBase
     public void testHistogramsUsedInOptimization()
     {
         Session histogramSession = Session.builder(getSession())
-                .setSystemProperty("optimizer_use_histograms", "true")
+                .setSystemProperty(OPTIMIZER_USE_HISTOGRAMS, "true")
                 .build();
         // standard-normal distribution should have vastly different estimates than uniform at the tails (e.g. -3, +3)
         NormalDistribution dist = new NormalDistribution(0, 1);
@@ -1712,10 +1726,10 @@ public abstract class IcebergDistributedTestBase
             assertQuerySucceeds("DROP TABLE IF EXISTS histogram_validation");
             assertQuerySucceeds("CREATE TABLE histogram_validation (c double)");
             assertQuerySucceeds(String.format("INSERT INTO histogram_validation VALUES %s", Joiner.on(", ").join(Arrays.stream(values).iterator())));
-            assertQuerySucceeds("ANALYZE histogram_validation");
+            assertQuerySucceeds(histogramSession, "ANALYZE histogram_validation");
             double min = values[0];
             double max = values[values.length - 1];
-            Function<Double, Double> cumulativeUniformProb = (value) -> Math.max(0.0, Math.min(1.0, (value - min) / (max - min)));
+//            Function<Double, Double> cumulativeUniformProb = (value) -> Math.max(0.0, Math.min(1.0, (value - min) / (max - min)));
             Consumer<Double> assertFilters = (value) -> {
                 // use Math.abs because if the value isn't found, the returned value of binary
                 // search is (- insert index). The absolute value index tells us roughly how
@@ -1756,11 +1770,14 @@ public abstract class IcebergDistributedTestBase
     public void testHistogramReconstruction(Type type, Object[] values)
     {
         try {
+            Session session = Session.builder(getSession())
+                    .setSystemProperty(OPTIMIZER_USE_HISTOGRAMS, "true")
+                    .build();
             assertQuerySucceeds("DROP TABLE IF EXISTS verify_histograms");
             assertQuerySucceeds(String.format("CREATE TABLE verify_histograms (c %s)", type.getDisplayName()));
             assertQuerySucceeds(String.format("INSERT INTO verify_histograms VALUES %s", Joiner.on(", ").join(values)));
-            assertQuerySucceeds("ANALYZE verify_histograms");
-            TableStatistics tableStatistics = getTableStats("verify_histograms");
+            assertQuerySucceeds(session, "ANALYZE verify_histograms");
+            TableStatistics tableStatistics = getTableStats("verify_histograms", Optional.empty(), session);
             Map<String, IcebergColumnHandle> nameToHandle = tableStatistics.getColumnStatistics().keySet()
                     .stream().map(IcebergColumnHandle.class::cast)
                     .collect(Collectors.toMap(BaseHiveColumnHandle::getName, identity()));

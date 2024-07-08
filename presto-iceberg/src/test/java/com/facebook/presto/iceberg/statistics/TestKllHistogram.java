@@ -20,12 +20,18 @@ import com.google.common.base.VerifyException;
 import io.airlift.slice.Slices;
 import org.apache.datasketches.common.ArrayOfDoublesSerDe;
 import org.apache.datasketches.common.ArrayOfLongsSerDe;
+import org.apache.datasketches.common.ArrayOfStringsSerDe;
 import org.apache.datasketches.kll.KllItemsSketch;
 import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
 
 import java.nio.ByteBuffer;
+import java.util.List;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.stream.Collector;
+import java.util.stream.Collectors;
 import java.util.stream.DoubleStream;
+import java.util.stream.IntStream;
 import java.util.stream.LongStream;
 
 import static com.facebook.presto.common.type.BigintType.BIGINT;
@@ -125,8 +131,14 @@ public class TestKllHistogram
                 {INTEGER, TestKllHistogram.generateLongSketch()},
                 {BIGINT, TestKllHistogram.generateLongSketch()},
                 {DOUBLE, TestKllHistogram.generateDoubleSketch()},
-                {createDecimalType(3, 1), TestKllHistogram.generateLongSketch()},
+                {createDecimalType(3, 1), TestKllHistogram.generateDoubleSketch()},
                 {DATE, TestKllHistogram.generateLongSketch()},
+                {createDecimalType(38, 0), TestKllHistogram.generateDoubleSketch()},
+                {TIME, generateLongSketch()},
+                {TIMESTAMP_WITH_TIME_ZONE, generateLongSketch()},
+                {TIMESTAMP, generateLongSketch()},
+                {REAL, generateDoubleSketch()},
+                {TIMESTAMP_MICROSECONDS, generateLongSketch()},
         };
     }
 
@@ -135,17 +147,11 @@ public class TestKllHistogram
     {
         return new Object[][] {
                 // long decimal (represented by Slice.class), currently not supported
-                {createDecimalType(38, 0)},
-                {VARCHAR},
-                {VarcharType.createVarcharType(10)},
                 {CharType.createCharType(0)},
                 {CharType.createCharType(100)},
-                {TIME},
-                {TIMESTAMP_WITH_TIME_ZONE},
-                {TIMESTAMP},
-                {TIMESTAMP_MICROSECONDS},
-                {REAL},
-                {BOOLEAN}
+                {BOOLEAN},
+                {VARCHAR},
+                {VarcharType.createVarcharType(10)}
         };
     }
 
@@ -187,6 +193,23 @@ public class TestKllHistogram
     {
         KllItemsSketch<Double> sketch = KllItemsSketch.newHeapInstance(Double::compareTo, new ArrayOfDoublesSerDe());
         DoubleStream.iterate(0.0, i -> i + 1).limit(100).forEach(sketch::update);
+        return sketch;
+    }
+
+    private static KllItemsSketch<String> generateStringSketch(int maxLen)
+    {
+        KllItemsSketch<String> sketch = KllItemsSketch.newHeapInstance(String::compareTo, new ArrayOfStringsSerDe());
+        List<String> strings = LongStream.iterate(0, i -> i + 1).boxed()
+                .limit(100)
+                .map(idx -> IntStream.iterate(0, i -> 1 + 1)
+                        .limit(ThreadLocalRandom.current().nextInt(1, maxLen))
+                        .mapToObj(i -> 'a' + (char) (ThreadLocalRandom.current().nextInt() % 26))
+                        .collect(Collector.of(StringBuilder::new,
+                                StringBuilder::append,
+                                StringBuilder::append,
+                                StringBuilder::toString)))
+                .collect(Collectors.toList());
+        strings.forEach(sketch::update);
         return sketch;
     }
 

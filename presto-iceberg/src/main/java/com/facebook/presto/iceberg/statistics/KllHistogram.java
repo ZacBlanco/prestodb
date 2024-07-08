@@ -13,7 +13,12 @@
  */
 package com.facebook.presto.iceberg.statistics;
 
-import com.facebook.presto.common.type.ShortDecimalType;
+import com.facebook.presto.common.type.AbstractIntType;
+import com.facebook.presto.common.type.AbstractLongType;
+import com.facebook.presto.common.type.AbstractVarcharType;
+import com.facebook.presto.common.type.DecimalType;
+import com.facebook.presto.common.type.Decimals;
+import com.facebook.presto.common.type.SqlDecimal;
 import com.facebook.presto.common.type.Type;
 import com.facebook.presto.spi.PrestoException;
 import com.facebook.presto.spi.statistics.ConnectorHistogram;
@@ -31,12 +36,18 @@ import org.apache.datasketches.common.ArrayOfStringsSerDe;
 import org.apache.datasketches.kll.KllItemsSketch;
 import org.apache.datasketches.memory.Memory;
 
+import java.math.BigInteger;
 import java.util.Comparator;
 import java.util.function.Function;
 
-import static com.facebook.presto.common.type.DateType.DATE;
+import static com.facebook.presto.common.type.BooleanType.BOOLEAN;
+import static com.facebook.presto.common.type.Decimals.isLongDecimal;
+import static com.facebook.presto.common.type.Decimals.isShortDecimal;
 import static com.facebook.presto.common.type.DoubleType.DOUBLE;
-import static com.facebook.presto.common.type.TypeUtils.isExactNumericType;
+import static com.facebook.presto.common.type.RealType.REAL;
+import static com.facebook.presto.common.type.SmallintType.SMALLINT;
+import static com.facebook.presto.common.type.TinyintType.TINYINT;
+import static com.facebook.presto.common.type.TypeUtils.isNumericType;
 import static com.facebook.presto.spi.StandardErrorCode.INVALID_ARGUMENTS;
 import static com.google.common.base.MoreObjects.toStringHelper;
 import static com.google.common.base.Verify.verify;
@@ -64,11 +75,11 @@ public class KllHistogram
         // the actual sketch can only accept the same object types which generated it
         // however, the API can only accept or generate double types. We cast the inputs
         // and results to/from double to satisfy the underlying sketch type.
-        if (type.getJavaType().isAssignableFrom(double.class)) {
+        if (parameters.getSerde().getClassOfT().equals(Double.class)) {
             toDouble = x -> (double) x;
             fromDouble = x -> x;
         }
-        else if (type.getJavaType().isAssignableFrom(long.class)) {
+        else if (parameters.getSerde().getClassOfT().equals(Long.class)) {
             // dual cast to auto-box/unbox from Double/Long for sketch
             toDouble = x -> (double) (long) x;
             fromDouble = x -> (long) (double) x;
@@ -81,10 +92,13 @@ public class KllHistogram
 
     public static boolean isKllHistogramSupportedType(Type type)
     {
-        return isExactNumericType(type) ||
-                type.equals(DOUBLE) ||
-                type.equals(DATE) ||
-                type instanceof ShortDecimalType;
+        try {
+            getSketchParameters(type);
+            return isNumericType(type) || type instanceof AbstractIntType || type instanceof AbstractLongType;
+        }
+        catch (PrestoException e) {
+            return false;
+        }
     }
 
     @JsonProperty
@@ -140,11 +154,18 @@ public class KllHistogram
     {
         private final Comparator<T> comparator;
         private final ArrayOfItemsSerDe<T> serde;
+        private final Function<Object, Object> conversion;
 
-        public SketchParameters(Comparator<T> comparator, ArrayOfItemsSerDe<T> serde)
+        public SketchParameters(Comparator<T> comparator, ArrayOfItemsSerDe<T> serde, Function<Object, Object> conversion)
         {
             this.comparator = comparator;
             this.serde = serde;
+            this.conversion = conversion;
+        }
+
+        public SketchParameters(Comparator<T> comparator, ArrayOfItemsSerDe<T> serde)
+        {
+            this(comparator, serde, Function.identity());
         }
 
         public Comparator<T> getComparator()
@@ -156,24 +177,43 @@ public class KllHistogram
         {
             return serde;
         }
+
+        public Function<Object, Object> getConversion()
+        {
+            return conversion;
+        }
     }
 
     private static SketchParameters<?> getSketchParameters(Type type)
     {
-        if (type.getJavaType().isAssignableFrom(double.class)) {
+        if (type.equals(REAL)) {
+            return new SketchParameters<>(Double::compareTo, new ArrayOfDoublesSerDe(),
+                    (Object intValue) -> (double) Float.intBitsToFloat(((Long) intValue).intValue()));
+        }
+        else if (isShortDecimal(type)) {
+            DecimalType decimalType = (DecimalType) type;
+            return new SketchParameters<>(Double::compareTo, new ArrayOfDoublesSerDe(),
+                    (Object longValue) -> new SqlDecimal(BigInteger.valueOf((long) longValue), decimalType.getScale(), decimalType.getScale()).toBigDecimal().doubleValue());
+        }
+        else if (isLongDecimal(type)) {
+            DecimalType decimalType = (DecimalType) type;
+            return new SketchParameters<>(Double::compareTo, new ArrayOfDoublesSerDe(),
+                    (Object encodedDecimal) -> new SqlDecimal(Decimals.decodeUnscaledValue((Slice) encodedDecimal), decimalType.getScale(), decimalType.getPrecision()).toBigDecimal().doubleValue());
+        }
+        else if (type.equals(DOUBLE)) {
             return new SketchParameters<>(Double::compareTo, new ArrayOfDoublesSerDe());
         }
-        else if (type.getJavaType().isAssignableFrom(long.class)) {
-            return new SketchParameters<>(Long::compareTo, new ArrayOfLongsSerDe());
-        }
-        else if (type.getJavaType().isAssignableFrom(Slice.class)) {
-            return new SketchParameters<>(String::compareTo, new ArrayOfStringsSerDe());
-        }
-        else if (type.getJavaType().isAssignableFrom(boolean.class)) {
+        else if (type.equals(BOOLEAN)) {
             return new SketchParameters<>(Boolean::compareTo, new ArrayOfBooleansSerDe());
         }
+        else if (type instanceof AbstractIntType || type instanceof AbstractLongType || type.equals(SMALLINT) || type.equals(TINYINT)) {
+            return new SketchParameters<>(Long::compareTo, new ArrayOfLongsSerDe());
+        }
+        else if (type instanceof AbstractVarcharType) {
+            return new SketchParameters<>(String::compareTo, new ArrayOfStringsSerDe(), (Object slice) -> ((Slice) slice).toStringUtf8());
+        }
         else {
-            throw new PrestoException(INVALID_ARGUMENTS, "failed to deserialize KLL Sketch. No suitable type found for " + type);
+            throw new PrestoException(INVALID_ARGUMENTS, "Unsupported type for KLL sketch: " + type);
         }
     }
 }
