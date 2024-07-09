@@ -122,7 +122,7 @@ public class KllSketchWithKAggregationFunction
         }
 
         KllSketchAggregationState.SketchParameters parameters = KllSketchAggregationState.getSketchParameters(type);
-        KllItemsSketch sketch = KllItemsSketch.newHeapInstance(parameters.getComparator(), parameters.getSerde());
+        KllItemsSketch sketch = KllItemsSketch.newHeapInstance((int) k, parameters.getComparator(), parameters.getSerde());
 
         state.setSketch(sketch);
         state.setConversion(parameters.getConversion());
