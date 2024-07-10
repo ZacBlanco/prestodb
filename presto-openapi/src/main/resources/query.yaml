@@ -2,7 +2,7 @@ openapi: 3.0.0
 info:
   title: Presto Query Info
   description: Optional multiline or single-line description in [CommonMark](http://commonmark.org/help/) or HTML.
-  version: 1
+  version: "1"
 servers:
   - url: http://localhost:8080
     description: Presto endpoint when running locally
@@ -93,28 +93,169 @@ components:
     BasicQueryInfo:
       type: object
       properties:
-        state:
-          type: string
-          description: The state of the query
-        queryStats:
-          $ref: '#/components/schemas/QueryStats'
-          description: Statistics about the query
-    QueryInfo:
-      type: object
-      properties:
         queryId:
           type: string
           description: The ID of the query
+        session:
+          type: object
+          description: Session information for the query
+          properties:
+            user:
+              type: string
+              description: The user who submitted the query
+            source:
+              type: string
+              description: The source of the query
+            catalog:
+              type: string
+              description: The catalog being queried
+            schema:
+              type: string
+              description: The schema being queried
+            transactionId:
+              type: string
+              description: The transaction ID
+              nullable: true
+        resourceGroupId:
+          type: string
+          nullable: true
+          description: The resource group ID
         state:
           type: string
           description: The state of the query
-        queryStats:
-          $ref: '#/components/schemas/QueryStats'
-          description: Statistics about the query
-    QueryStats:
-      type: object
-      properties:
-        createTime:
+        memoryPool:
           type: string
-          format: date-time
-          description: The time when the query was created
+          description: The memory pool ID
+        scheduled:
+          type: boolean
+          description: Whether the query is scheduled
+        self:
+          type: string
+          format: uri
+          description: The URI of the query
+        query:
+          type: string
+          description: The query string
+        queryHash:
+          type: string
+          description: The hash of the query
+        queryStats:
+          type: object
+          description: Basic statistics about the query
+          properties:
+            createTime:
+              type: string
+              format: date-time
+              description: The time when the query was created
+            executionStartTime:
+              type: string
+              format: date-time
+              description: The time when query execution started
+            endTime:
+              type: string
+              format: date-time
+              description: The time when the query ended
+            totalTasks:
+              type: integer
+              description: The total number of tasks
+            runningTasks:
+              type: integer
+              description: The number of running tasks
+            completedTasks:
+              type: integer
+              description: The number of completed tasks
+            totalDrivers:
+              type: integer
+              description: The total number of drivers
+            queuedDrivers:
+              type: integer
+              description: The number of queued drivers
+            runningDrivers:
+              type: integer
+              description: The number of running drivers
+            completedDrivers:
+              type: integer
+              description: The number of completed drivers
+            cumulativeUserMemory:
+              type: string
+              description: The cumulative user memory
+            cumulativeTotalMemory:
+              type: string
+              description: The cumulative total memory
+            totalScheduledTime:
+              type: string
+              description: The total scheduled time
+            totalCpuTime:
+              type: string
+              description: The total CPU time
+            totalBlockedTime:
+              type: string
+              description: The total blocked time
+            rawInputDataSize:
+              type: string
+              description: The raw input data size
+            rawInputPositions:
+              type: integer
+              description: The raw input positions
+            processedInputDataSize:
+              type: string
+              description: The processed input data size
+            processedInputPositions:
+              type: integer
+              description: The processed input positions
+            outputDataSize:
+              type: string
+              description: The output data size
+            outputPositions:
+              type: integer
+              description: The output positions
+            writtenOutputDataSize:
+              type: string
+              description: The written output data size
+            writtenOutputPositions:
+              type: integer
+              description: The written output positions
+        errorType:
+          type: string
+          nullable: true
+          description: The type of error, if any
+        errorCode:
+          type: string
+          nullable: true
+          description: The error code, if any
+        failureInfo:
+          type: object
+          nullable: true
+          description: Information about the failure, if any
+          properties:
+            message:
+              type: string
+              description: The error message
+            errorLocation:
+              type: string
+              description: The location of the error
+              nullable: true
+            errorCode:
+              type: string
+              description: The error code
+              nullable: true
+        queryType:
+          type: string
+          nullable: true
+          description: The type of the query
+        warnings:
+          type: array
+          items:
+            type: object
+            description: Warnings related to the query
+            properties:
+              message:
+                type: string
+                description: The warning message
+              warningCode:
+                type: string
+                description: The warning code
+        preparedQuery:
+          type: string
+          nullable: true
+          description: The prepared query, if any
