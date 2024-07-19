@@ -92,30 +92,25 @@ components:
   schemas:
     BasicQueryInfo:
       type: object
+      required:
+        - queryId
+        - session
+        - state
+        - memoryPool
+        - scheduled
+        - self
+        - query
+        - queryStats
+        - errorType
+        - errorCode
+        - executionFailureInfo
+        - warnings
       properties:
         queryId:
           type: string
           description: The ID of the query
         session:
-          type: object
-          description: Session information for the query
-          properties:
-            user:
-              type: string
-              description: The user who submitted the query
-            source:
-              type: string
-              description: The source of the query
-            catalog:
-              type: string
-              description: The catalog being queried
-            schema:
-              type: string
-              description: The schema being queried
-            transactionId:
-              type: string
-              description: The transaction ID
-              nullable: true
+          $ref: '#/components/schemas/SessionRepresentation'
         resourceGroupId:
           type: string
           nullable: true
@@ -136,11 +131,33 @@ components:
         query:
           type: string
           description: The query string
-        queryHash:
-          type: string
-          description: The hash of the query
+
         queryStats:
           type: object
+          required:
+            - createTime
+            - executionStartTime
+            - endTime
+            - totalTasks
+            - runningTasks
+            - completedTasks
+            - totalDrivers
+            - queuedDrivers
+            - runningDrivers
+            - completedDrivers
+            - cumulativeUserMemory
+            - cumulativeTotalMemory
+            - totalScheduledTime
+            - totalCpuTime
+            - totalBlockedTime
+            - rawInputDataSize
+            - rawInputPositions
+            - processedInputDataSize
+            - processedInputPositions
+            - outputDataSize
+            - outputPositions
+            - writtenOutputDataSize
+            - writtenOutputPositions
           description: Basic statistics about the query
           properties:
             createTime:
@@ -259,3 +276,149 @@ components:
           type: string
           nullable: true
           description: The prepared query, if any
+    QueryResults:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The ID of the query
+        infoUri:
+          type: string
+          format: uri
+          description: The URI at the coordinator that provides information about the query
+        partialCancelUri:
+          type: string
+          format: uri
+          nullable: true
+          description: URI to a leaf stage that is currently executing in order to issue a cancel signal
+        nextUri:
+          type: string
+          format: uri
+          nullable: true
+          description: URI to get the next batch of query results
+        columns:
+          type: array
+          items:
+            $ref: '#/components/schemas/Column'
+          nullable: true
+          description: List of columns present in the result set
+        data:
+          type: array
+          items:
+            type: array
+            items:
+              type: string
+          nullable: true
+          description: Iterator to the payload (results)
+        binaryData:
+          type: array
+          items:
+            type: string
+          nullable: true
+          description: Iterator to the payload (results) in binary format
+        stats:
+          $ref: '#/components/schemas/StatementStats'
+
+        error:
+          nullable: true
+          description: Error encountered in query execution
+        warnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/PrestoWarning'
+          description: List of warnings encountered in query execution
+        updateType:
+          type: string
+          nullable: true
+          description: The update type of the query
+        updateCount:
+          type: integer
+          nullable: true
+          description: The count of rows updated by the query
+    Column:
+      type: object
+      properties:
+        name:
+          type: string
+          description: The name of the column
+        type:
+          type: string
+          description: The type of the column
+        typeSignature:
+          $ref: '#/components/schemas/TypeSignature'
+    StatementStats:
+      type: object
+      properties:
+        state:
+          type: string
+          description: The state of the query
+        waitingForPrerequisites:
+          type: boolean
+          description: Whether the query is waiting for prerequisites
+        elapsedTimeMillis:
+          type: integer
+          description: The elapsed time in milliseconds
+        queuedTimeMillis:
+          type: integer
+          description: The queued time in milliseconds
+        waitingForPrerequisitesTimeMillis:
+          type: integer
+          description: The waiting for prerequisites time in milliseconds
+    QueryError:
+      type: object
+      properties:
+        message:
+          type: string
+          description: The error message
+        errorLocation:
+          type: string
+          description: The location of the error
+          nullable: true
+        errorCode:
+          type: string
+          description: The error code
+          nullable: true
+    PrestoWarning:
+      type: object
+      properties:
+        message:
+          type: string
+          description: The warning message
+        warningCode:
+          type: string
+          description: The warning code
+    TypeSignature:
+      type: object
+      properties:
+        rawType:
+          type: string
+          description: The raw type of the signature
+        typeArguments:
+          type: array
+          items:
+            $ref: '#/components/schemas/TypeSignature'
+          description: The type arguments of the signature
+    QueryInfo:
+      type: object
+    SessionRepresentation:
+      type: object
+      description: Session information for the query
+      properties:
+        user:
+          type: string
+          description: The user who submitted the query
+        source:
+          type: string
+          description: The source of the query
+        catalog:
+          type: string
+          description: The catalog being queried
+        schema:
+          type: string
+          description: The schema being queried
+        transactionId:
+          type: string
+          description: The transaction ID
+          nullable: true
+
+
