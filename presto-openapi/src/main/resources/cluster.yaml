@@ -25,7 +25,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ClusterStats'
+                $ref: './schemas.yaml/#/components/schemas/ClusterStats'
   /v1/cluster/memory:
     get:
       summary: Retrieve cluster memory pool information
@@ -36,7 +36,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ClusterMemoryPoolInfo'
+                type: object
+                additionalProperties:
+                  $ref: './schemas.yaml/#/components/schemas/MemoryPoolInfo'
   /v1/cluster/workerMemory:
     get:
       summary: Retrieve worker memory information
@@ -47,7 +49,10 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/WorkerMemoryInfo'
+                type: object
+
+                additionalProperties:
+                  $ref: './schemas.yaml/#/components/schemas/MemoryInfo'
   /v1/cluster/ttl:
     get:
       summary: Retrieve cluster TTL information
@@ -58,82 +63,4 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ClusterTtl'
-components:
-  schemas:
-    ClusterStats:
-      type: object
-      properties:
-        runningQueries:
-          type: integer
-          description: The number of running queries
-        blockedQueries:
-          type: integer
-          description: The number of blocked queries
-        queuedQueries:
-          type: integer
-          description: The number of queued queries
-        activeWorkers:
-          type: integer
-          description: The number of active workers
-        runningDrivers:
-          type: integer
-          description: The number of running drivers
-        runningTasks:
-          type: integer
-          description: The number of running tasks
-        reservedMemory:
-          type: number
-          format: double
-          description: The amount of reserved memory
-        totalInputRows:
-          type: integer
-          description: The total number of input rows
-        totalInputBytes:
-          type: integer
-          description: The total number of input bytes
-        totalCpuTimeSecs:
-          type: integer
-          description: The total CPU time in seconds
-        adjustedQueueSize:
-          type: integer
-          description: The adjusted queue size
-    ClusterMemoryPoolInfo:
-      type: object
-      properties:
-        pools:
-          type: array
-          items:
-            type: object
-            properties:
-              name:
-                type: string
-              reserved:
-                type: number
-                format: double
-              free:
-                type: number
-                format: double
-              total:
-                type: number
-                format: double
-    WorkerMemoryInfo:
-      type: object
-      properties:
-        workers:
-          type: array
-          items:
-            type: object
-            properties:
-              id:
-                type: string
-              memory:
-                type: number
-                format: double
-    ClusterTtl:
-      type: object
-      properties:
-        ttl:
-          type: number
-          format: double
-          description: Time-to-live value for the cluster
+                $ref: './schemas.yaml/#/components/schemas/ConfidenceBasedTtlInfo'

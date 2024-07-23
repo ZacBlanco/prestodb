@@ -43,7 +43,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/QueryResults'
+                $ref: './schemas.yaml/#/components/schemas/QueryResults'
         '400':
           description: Bad request
   /v1/statement/queued/retry/{queryId}:
@@ -81,7 +81,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/QueryResults'
+                $ref: './schemas.yaml/#/components/schemas/QueryResults'
         '404':
           description: Query not found
   /v1/statement/queued/{queryId}/{token}:
@@ -138,6 +138,7 @@ paths:
           content:
             application/json:
               schema:
+                $ref: './schemas.yaml/#/components/schemas/QueryResults'
         '404':
           description: Query not found
 
@@ -168,136 +169,3 @@ paths:
           description: Query canceled successfully
         '404':
           description: Query not found
-
-
-components:
-  schemas:
-    QueryResults:
-      type: object
-      properties:
-        id:
-          type: string
-          description: The ID of the query
-        infoUri:
-          type: string
-          format: uri
-          description: The URI at the coordinator that provides information about the query
-        partialCancelUri:
-          type: string
-          format: uri
-          nullable: true
-          description: URI to a leaf stage that is currently executing in order to issue a cancel signal
-        nextUri:
-          type: string
-          format: uri
-          nullable: true
-          description: URI to get the next batch of query results
-        columns:
-          type: array
-          items:
-            $ref: '#/components/schemas/Column'
-          nullable: true
-          description: List of columns (with corresponding data types) present in the result set
-        data:
-          type: array
-          items:
-            type: array
-            items:
-              type: object
-          nullable: true
-          description: Payload (results)
-        binaryData:
-          type: array
-          items:
-            type: string
-          nullable: true
-          description: Payload (results) in binary format
-        stats:
-          $ref: '#/components/schemas/StatementStats'
-          description: Cumulative statistics on the query being executed
-        error:
-          $ref: '#/components/schemas/QueryError'
-          nullable: true
-          description: Error encountered in query execution
-        warnings:
-          type: array
-          items:
-            $ref: '#/components/schemas/PrestoWarning'
-          description: List of warnings encountered in query execution
-        updateType:
-          type: string
-          nullable: true
-          description: The update type, if any, of the query as determined by the Analyzer
-        updateCount:
-          type: integer
-          nullable: true
-          description: Count of number of rows updated by the query
-    StatementStats:
-      type: object
-      properties:
-        state:
-          type: string
-          description: The state of the query
-        waitingForPrerequisites:
-          type: boolean
-          description: Whether the query is waiting for prerequisites
-        elapsedTimeMillis:
-          type: integer
-          description: The elapsed time in milliseconds
-        queuedTimeMillis:
-          type: integer
-          description: The queued time in milliseconds
-        waitingForPrerequisitesTimeMillis:
-          type: integer
-          description: The waiting for prerequisites time in milliseconds
-    QueryError:
-      type: object
-      properties:
-        message:
-          type: string
-          description: Error message
-        errorCode:
-          type: integer
-          description: Error code
-        errorLocation:
-          type: string
-          description: Error location
-    PrestoWarning:
-      type: object
-      properties:
-        message:
-          type: string
-          description: Warning message
-        warningCode:
-          type: string
-          description: Warning code
-    Column:
-      type: object
-      properties:
-        name:
-          type: string
-          description: Name of the column
-        type:
-          type: string
-          description: Data type of the column
-        typeSignature:
-          $ref: '#/components/schemas/TypeSignature'
-    TypeSignature:
-      type: object
-      properties:
-        rawType:
-          type: string
-          description: Raw type of the column
-        arguments:
-          type: array
-          items:
-            $ref: '#/components/schemas/TypeSignatureParameter'
-    TypeSignatureParameter:
-      type: object
-      properties:
-        kind:
-          type: string
-          description: Kind of the parameter
-        value:
-          type: string
-          description: Value of the parameter

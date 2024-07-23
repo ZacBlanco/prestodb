@@ -33,7 +33,7 @@
                 <artifactId>openapi-generator-maven-plugin</artifactId>
                 <executions>
                     <execution>
-                        <id>generate openapi assets</id>
+                        <id>generate openapi HTML documentation</id>
                         <goals>
                             <goal>generate</goal>
                         </goals>
@@ -43,8 +43,30 @@
                             <inputSpecRootDirectory>${project.basedir}/src/main/resources</inputSpecRootDirectory>
                             <mergedFileName>_full_spec</mergedFileName>
                             <generatorName>html</generatorName>
-                            <configOptions>
-                            </configOptions>
+                            <groupId>com.facebook.presto</groupId>
+                            <artifactId>presto-openapi</artifactId>
+                            <additionalProperties>
+                                <property>appName=presto</property>
+                                <property>appDescription="Presto - SQL on Anything"</property>
+                                <property>infoUrl=https://prestodb.io/docs/</property>
+                                <property>infoEmail=https://prestodb.slack.com/</property>
+                                <property>version=${project.version}</property>
+                            </additionalProperties>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>generate openapi spec file</id>
+                        <goals>
+                            <goal>generate</goal>
+                        </goals>
+                        <configuration>
+                            <!-- required to be set, even though it isn't used-->
+                            <inputSpec>${project.basedir}/src/main/resources</inputSpec>
+                            <inputSpecRootDirectory>${project.basedir}/src/main/resources</inputSpecRootDirectory>
+                            <mergedFileName>_full_spec</mergedFileName>
+                            <generatorName>openapi</generatorName>
+                            <groupId>com.facebook.presto</groupId>
+                            <artifactId>presto-openapi</artifactId>
                         </configuration>
                     </execution>
                 </executions>
