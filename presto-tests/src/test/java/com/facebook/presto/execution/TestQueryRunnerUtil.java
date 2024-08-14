@@ -23,6 +23,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import static com.facebook.airlift.concurrent.MoreFutures.getFutureValue;
@@ -42,7 +43,7 @@ public final class TestQueryRunnerUtil
     public static QueryId createQuery(DistributedQueryRunner queryRunner, int coordinator, Session session, String sql)
     {
         DispatchManager dispatchManager = queryRunner.getCoordinator(coordinator).getDispatchManager();
-        getFutureValue(dispatchManager.createQuery(session.getQueryId(), "slug", 0, new TestingSessionContext(session), sql));
+        getFutureValue(dispatchManager.createQuery(session.getQueryId(), "slug", 0, new TestingSessionContext(session), sql, Optional.empty()));
         return session.getQueryId();
     }
 

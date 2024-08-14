@@ -19,6 +19,7 @@ import com.facebook.presto.common.analyzer.PreparedQuery;
 import com.facebook.presto.common.resourceGroups.QueryType;
 import com.facebook.presto.cost.CostCalculator;
 import com.facebook.presto.cost.HistoryBasedPlanStatisticsManager;
+import com.facebook.presto.cost.StatsAndCosts;
 import com.facebook.presto.cost.StatsCalculator;
 import com.facebook.presto.execution.StateMachine.StateChangeListener;
 import com.facebook.presto.execution.buffer.OutputBuffers;
@@ -49,19 +50,27 @@ import com.facebook.presto.spi.resourceGroups.ResourceGroupQueryLimits;
 import com.facebook.presto.split.CloseableSplitSourceProvider;
 import com.facebook.presto.split.SplitManager;
 import com.facebook.presto.sql.Optimizer;
+import com.facebook.presto.sql.analyzer.preplanned.PrePlannedQueryAnalysis;
 import com.facebook.presto.sql.parser.SqlParser;
 import com.facebook.presto.sql.planner.CanonicalPlanWithInfo;
+import com.facebook.presto.sql.planner.ExpressionExtractor;
 import com.facebook.presto.sql.planner.InputExtractor;
 import com.facebook.presto.sql.planner.OutputExtractor;
 import com.facebook.presto.sql.planner.PartitioningHandle;
+import com.facebook.presto.sql.planner.PartitioningProviderManager;
 import com.facebook.presto.sql.planner.Plan;
 import com.facebook.presto.sql.planner.PlanCanonicalInfoProvider;
 import com.facebook.presto.sql.planner.PlanFragmenter;
 import com.facebook.presto.sql.planner.PlanOptimizers;
 import com.facebook.presto.sql.planner.SplitSourceFactory;
 import com.facebook.presto.sql.planner.SubPlan;
+import com.facebook.presto.sql.planner.TypeProvider;
+import com.facebook.presto.sql.planner.VariablesExtractor;
+import com.facebook.presto.sql.planner.optimizations.AddExchanges;
+import com.facebook.presto.sql.planner.optimizations.AddLocalExchanges;
 import com.facebook.presto.sql.planner.optimizations.PlanOptimizer;
 import com.facebook.presto.sql.planner.sanity.PlanChecker;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.util.concurrent.ListenableFuture;
 import io.airlift.units.DataSize;
@@ -79,6 +88,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
+import java.util.stream.IntStream;
 
 import static com.facebook.presto.SystemSessionProperties.getExecutionPolicy;
 import static com.facebook.presto.SystemSessionProperties.getQueryAnalyzerTimeout;
@@ -98,6 +108,7 @@ import static com.facebook.presto.util.AnalyzerUtil.checkAccessPermissions;
 import static com.facebook.presto.util.AnalyzerUtil.getAnalyzerContext;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Throwables.throwIfInstanceOf;
+import static com.google.common.collect.ImmutableSet.toImmutableSet;
 import static io.airlift.units.DataSize.Unit.BYTE;
 import static io.airlift.units.DataSize.succinctBytes;
 import static java.util.Objects.requireNonNull;
@@ -124,6 +135,7 @@ public class SqlQueryExecution
     private final ExecutorService queryExecutor;
     private final ScheduledExecutorService timeoutThreadExecutor;
     private final SectionExecutionFactory sectionExecutionFactory;
+    private final PartitioningProviderManager partitioningProviderManager;
     private final InternalNodeManager internalNodeManager;
 
     private final AtomicReference<SqlQuerySchedulerInterface> queryScheduler = new AtomicReference<>();
@@ -165,7 +177,8 @@ public class SqlQueryExecution
             CostCalculator costCalculator,
             PlanChecker planChecker,
             PartialResultQueryManager partialResultQueryManager,
-            PlanCanonicalInfoProvider planCanonicalInfoProvider)
+            PlanCanonicalInfoProvider planCanonicalInfoProvider,
+            PartitioningProviderManager partitioningProviderManager)
     {
         try (SetThreadName ignored = new SetThreadName("Query-%s", stateMachine.getQueryId())) {
             this.queryAnalyzer = requireNonNull(queryAnalyzer, "queryAnalyzer is null");
@@ -189,6 +202,7 @@ public class SqlQueryExecution
             this.stateMachine = requireNonNull(stateMachine, "stateMachine is null");
             this.planChecker = requireNonNull(planChecker, "planChecker is null");
             this.planCanonicalInfoProvider = requireNonNull(planCanonicalInfoProvider, "planCanonicalInfoProvider is null");
+            this.partitioningProviderManager = requireNonNull(partitioningProviderManager, "partitioningProviderManager is null");
             this.analyzerContext = getAnalyzerContext(queryAnalyzer, metadata.getMetadataResolver(stateMachine.getSession()), idAllocator, new VariableAllocator(), stateMachine.getSession());
 
             // analyze query
@@ -454,13 +468,21 @@ public class SqlQueryExecution
 
                 PlanRoot plan;
 
-                // set a thread timeout in case query analyzer ends up in an infinite loop
-                try (TimeoutThread unused = new TimeoutThread(
-                        Thread.currentThread(),
-                        timeoutThreadExecutor,
-                        getQueryAnalyzerTimeout(getSession()))) {
-                    // create logical plan for the query
-                    plan = createLogicalPlanAndOptimize();
+                if (queryAnalysis instanceof PrePlannedQueryAnalysis) {
+                    // this uses the existing plan and executes it directly if it
+                    // has already been created or passed for execution.
+                    plan = createPlanRootFromGivenPlan();
+                }
+                else {
+                    // set a thread timeout in case query analyzer ends up in an infinite loop
+                    // this creates a new plan SQL and optimizes
+                    try (TimeoutThread unused = new TimeoutThread(
+                            Thread.currentThread(),
+                            timeoutThreadExecutor,
+                            getQueryAnalyzerTimeout(getSession()))) {
+                        // create logical plan for the query
+                        plan = createLogicalPlanAndOptimize();
+                    }
                 }
 
                 metadata.beginQuery(getSession(), plan.getConnectors());
@@ -527,6 +549,41 @@ public class SqlQueryExecution
         stateMachine.addQueryInfoStateChangeListener(stateChangeListener);
     }
 
+    private PlanRoot createPlanRootFromGivenPlan()
+    {
+        // time analysis phase
+        stateMachine.beginAnalysis();
+        PrePlannedQueryAnalysis analysis = (PrePlannedQueryAnalysis) queryAnalysis;
+        PlanNode root = analysis.getPlan();
+        IntStream.range(0, 1000).forEach(x -> idAllocator.getNextId());
+        Plan plan;
+        try {
+            Optimizer optimizer = new Optimizer(
+                    stateMachine.getSession(),
+                    metadata,
+                    ImmutableList.of(
+                            new AddExchanges(metadata, sqlParser, partitioningProviderManager, false),
+                            new AddLocalExchanges(metadata, sqlParser, false)),
+                    planChecker,
+                    sqlParser,
+                    analyzerContext.getVariableAllocator(),
+                    idAllocator,
+                    stateMachine.getWarningCollector(),
+                    statsCalculator,
+                    costCalculator,
+                    false);
+            plan = optimizer.validateAndOptimizePlan(root, OPTIMIZED_AND_VALIDATED);
+        }
+        catch (IllegalArgumentException e) {
+            TypeProvider types = TypeProvider.fromVariables(ExpressionExtractor.extractExpressions(root).stream().flatMap(expr -> VariablesExtractor.extractAll(expr).stream()).collect(toImmutableSet()));
+            plan = new Plan(root, types, StatsAndCosts.empty());
+        }
+        queryAnalysis.extractConnectors().forEach(connector -> metadata.getCatalogHandle(getSession(), connector.getCatalogName()));
+        SubPlan fragmentedPlan = setPlanMetadata(plan);
+        boolean explainAnalyze = queryAnalysis.isExplainAnalyzeQuery();
+        return new PlanRoot(fragmentedPlan, !explainAnalyze, queryAnalysis.extractConnectors());
+    }
+
     private PlanRoot createLogicalPlanAndOptimize()
     {
         try {
@@ -557,37 +614,43 @@ public class SqlQueryExecution
                     () -> optimizer.validateAndOptimizePlan(planNode, OPTIMIZED_AND_VALIDATED));
 
             queryPlan.set(plan);
-            stateMachine.setPlanStatsAndCosts(plan.getStatsAndCosts());
-            stateMachine.setPlanIdNodeMap(plan.getPlanIdNodeMap());
-            List<CanonicalPlanWithInfo> canonicalPlanWithInfos = getSession().getRuntimeStats().profileNanos(
-                    GET_CANONICAL_INFO_TIME_NANOS,
-                    () -> getCanonicalInfo(getSession(), plan.getRoot(), planCanonicalInfoProvider));
-            stateMachine.setPlanCanonicalInfo(canonicalPlanWithInfos);
-
-            // extract inputs
-            List<Input> inputs = new InputExtractor(metadata, stateMachine.getSession()).extractInputs(plan.getRoot());
-            stateMachine.setInputs(inputs);
-
-            // extract output
-            Optional<Output> output = new OutputExtractor().extractOutput(plan.getRoot());
-            stateMachine.setOutput(output);
-
-            // fragment the plan
-            // the variableAllocator is finally passed to SqlQueryScheduler for runtime cost-based optimizations
-            variableAllocator.set(new VariableAllocator(plan.getTypes().allVariables()));
-            SubPlan fragmentedPlan = getSession().getRuntimeStats().profileNanos(
-                    FRAGMENT_PLAN_TIME_NANOS,
-                    () -> planFragmenter.createSubPlans(stateMachine.getSession(), plan, false, idAllocator, variableAllocator.get(), stateMachine.getWarningCollector()));
-
-            // record analysis time
-            stateMachine.endAnalysis();
-
+            SubPlan fragmentedPlan = setPlanMetadata(plan);
             boolean explainAnalyze = queryAnalysis.isExplainAnalyzeQuery();
             return new PlanRoot(fragmentedPlan, !explainAnalyze, queryAnalysis.extractConnectors());
         }
         catch (StackOverflowError e) {
             throw new PrestoException(NOT_SUPPORTED, "statement is too large (stack overflow during analysis)", e);
         }
+    }
+
+    private SubPlan setPlanMetadata(Plan plan)
+    {
+        stateMachine.setPlanStatsAndCosts(plan.getStatsAndCosts());
+        stateMachine.setPlanIdNodeMap(plan.getPlanIdNodeMap());
+        List<CanonicalPlanWithInfo> canonicalPlanWithInfos = getSession().getRuntimeStats().profileNanos(
+                GET_CANONICAL_INFO_TIME_NANOS,
+                () -> getCanonicalInfo(getSession(), plan.getRoot(), planCanonicalInfoProvider));
+        stateMachine.setPlanCanonicalInfo(canonicalPlanWithInfos);
+
+        // extract inputs
+        List<Input> inputs = new InputExtractor(metadata, stateMachine.getSession()).extractInputs(plan.getRoot());
+        stateMachine.setInputs(inputs);
+
+        // extract output
+        Optional<Output> output = new OutputExtractor().extractOutput(plan.getRoot());
+        stateMachine.setOutput(output);
+
+        // fragment the plan
+        // the variableAllocator is finally passed to SqlQueryScheduler for runtime cost-based optimizations
+        variableAllocator.set(new VariableAllocator(plan.getTypes().allVariables()));
+        SubPlan fragmentedPlan = getSession().getRuntimeStats().profileNanos(
+                FRAGMENT_PLAN_TIME_NANOS,
+                () -> planFragmenter.createSubPlans(stateMachine.getSession(), plan, false, idAllocator, variableAllocator.get(), stateMachine.getWarningCollector()));
+
+        // record analysis time
+        stateMachine.endAnalysis();
+
+        return fragmentedPlan;
     }
 
     private void planDistribution(PlanRoot plan)
@@ -855,6 +918,7 @@ public class SqlQueryExecution
         private final PlanChecker planChecker;
         private final PartialResultQueryManager partialResultQueryManager;
         private final HistoryBasedPlanStatisticsManager historyBasedPlanStatisticsManager;
+        private final PartitioningProviderManager partitioningProviderManager;
 
         @Inject
         SqlQueryExecutionFactory(
@@ -876,7 +940,8 @@ public class SqlQueryExecution
                 CostCalculator costCalculator,
                 PlanChecker planChecker,
                 PartialResultQueryManager partialResultQueryManager,
-                HistoryBasedPlanStatisticsManager historyBasedPlanStatisticsManager)
+                HistoryBasedPlanStatisticsManager historyBasedPlanStatisticsManager,
+                PartitioningProviderManager partitioningProviderManager)
         {
             requireNonNull(config, "config is null");
             this.schedulerStats = requireNonNull(schedulerStats, "schedulerStats is null");
@@ -899,6 +964,7 @@ public class SqlQueryExecution
             this.planChecker = requireNonNull(planChecker, "planChecker is null");
             this.partialResultQueryManager = requireNonNull(partialResultQueryManager, "partialResultQueryManager is null");
             this.historyBasedPlanStatisticsManager = requireNonNull(historyBasedPlanStatisticsManager, "historyBasedPlanStatisticsManager is null");
+            this.partitioningProviderManager = requireNonNull(partitioningProviderManager, "partitioningProviderManager is null");
         }
 
         @Override
@@ -939,7 +1005,8 @@ public class SqlQueryExecution
                     costCalculator,
                     planChecker,
                     partialResultQueryManager,
-                    historyBasedPlanStatisticsManager.getPlanCanonicalInfoProvider());
+                    historyBasedPlanStatisticsManager.getPlanCanonicalInfoProvider(),
+                    partitioningProviderManager);
         }
     }
 }

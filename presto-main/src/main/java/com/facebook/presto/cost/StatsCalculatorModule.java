@@ -13,13 +13,18 @@
  */
 package com.facebook.presto.cost;
 
+import com.facebook.presto.dispatcher.DispatchManager;
+import com.facebook.presto.execution.QueryManager;
 import com.facebook.presto.metadata.Metadata;
+import com.facebook.presto.server.protocol.LocalQueryProvider;
 import com.google.common.collect.ImmutableList;
 import com.google.inject.Binder;
 import com.google.inject.Module;
+import com.google.inject.Provider;
 import com.google.inject.Provides;
 import com.google.inject.Scopes;
 
+import javax.annotation.Nullable;
 import javax.inject.Singleton;
 
 import static com.facebook.airlift.configuration.ConfigBinder.configBinder;
@@ -41,6 +46,9 @@ public class StatsCalculatorModule
     @Provides
     @Singleton
     public static StatsCalculator createNewStatsCalculator(
+            @Nullable Provider<DispatchManager> dispatchManagerProvider,
+            @Nullable Provider<LocalQueryProvider> queryProvider,
+            @Nullable Provider<QueryManager> queryManagerProvider,
             Metadata metadata,
             ScalarStatsCalculator scalarStatsCalculator,
             StatsNormalizer normalizer,
@@ -49,7 +57,7 @@ public class StatsCalculatorModule
             FragmentStatsProvider fragmentStatsProvider)
     {
         StatsCalculator delegate = createComposableStatsCalculator(metadata, scalarStatsCalculator, normalizer, filterStatsCalculator, fragmentStatsProvider);
-        return historyBasedPlanStatisticsManager.getHistoryBasedPlanStatisticsCalculator(delegate);
+        return historyBasedPlanStatisticsManager.getHistoryBasedPlanStatisticsCalculator(delegate, dispatchManagerProvider, queryProvider, queryManagerProvider, metadata);
     }
 
     public static ComposableStatsCalculator createComposableStatsCalculator(

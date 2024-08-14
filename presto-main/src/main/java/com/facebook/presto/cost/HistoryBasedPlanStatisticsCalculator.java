@@ -13,10 +13,23 @@
  */
 package com.facebook.presto.cost;
 
+import com.facebook.airlift.log.Logger;
 import com.facebook.presto.Session;
 import com.facebook.presto.common.plan.PlanCanonicalizationStrategy;
+import com.facebook.presto.dispatcher.DispatchManager;
+import com.facebook.presto.execution.QueryManager;
+import com.facebook.presto.metadata.Metadata;
+import com.facebook.presto.server.HttpRequestSessionContext;
+import com.facebook.presto.server.protocol.LocalQueryProvider;
+import com.facebook.presto.server.protocol.Query;
+import com.facebook.presto.spi.QueryId;
+import com.facebook.presto.spi.plan.AggregationNode;
+import com.facebook.presto.spi.plan.OutputNode;
 import com.facebook.presto.spi.plan.PlanNode;
+import com.facebook.presto.spi.plan.PlanNodeId;
 import com.facebook.presto.spi.plan.PlanNodeWithHash;
+import com.facebook.presto.spi.relation.CallExpression;
+import com.facebook.presto.spi.relation.VariableReferenceExpression;
 import com.facebook.presto.spi.statistics.HistoricalPlanStatistics;
 import com.facebook.presto.spi.statistics.HistoricalPlanStatisticsEntry;
 import com.facebook.presto.spi.statistics.HistoryBasedPlanStatisticsProvider;
@@ -24,15 +37,21 @@ import com.facebook.presto.spi.statistics.HistoryBasedSourceInfo;
 import com.facebook.presto.spi.statistics.PlanStatistics;
 import com.facebook.presto.sql.planner.PlanCanonicalInfoProvider;
 import com.facebook.presto.sql.planner.TypeProvider;
+import com.facebook.presto.sql.planner.VariablesExtractor;
 import com.facebook.presto.sql.planner.iterative.Lookup;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
+import com.google.inject.Provider;
+import io.airlift.units.DataSize;
+import io.airlift.units.Duration;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 import java.util.function.Supplier;
 
 import static com.facebook.presto.SystemSessionProperties.enableVerboseHistoryBasedOptimizerRuntimeStats;
@@ -43,34 +62,53 @@ import static com.facebook.presto.SystemSessionProperties.useHistoryBasedPlanSta
 import static com.facebook.presto.common.RuntimeMetricName.HISTORY_OPTIMIZER_QUERY_REGISTRATION_GET_PLAN_NODE_HASHES;
 import static com.facebook.presto.common.RuntimeMetricName.HISTORY_OPTIMIZER_QUERY_REGISTRATION_GET_STATISTICS;
 import static com.facebook.presto.common.RuntimeUnit.NANO;
+import static com.facebook.presto.common.type.BigintType.BIGINT;
 import static com.facebook.presto.cost.HistoricalPlanStatisticsUtil.getSelectedHistoricalPlanStatisticsEntry;
 import static com.facebook.presto.cost.HistoryBasedPlanStatisticsManager.historyBasedPlanCanonicalizationStrategyList;
 import static com.facebook.presto.spi.statistics.PlanStatistics.toConfidenceLevel;
 import static com.facebook.presto.sql.planner.iterative.Plans.resolveGroupReferences;
+import static com.facebook.presto.sql.planner.planPrinter.PlanPrinter.jsonFragmentPlan;
 import static com.google.common.collect.ImmutableList.toImmutableList;
 import static com.google.common.graph.Traverser.forTree;
+import static io.airlift.units.DataSize.succinctDataSize;
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
+import static java.util.UUID.randomUUID;
 import static java.util.concurrent.TimeUnit.NANOSECONDS;
+import static java.util.concurrent.TimeUnit.SECONDS;
 
 public class HistoryBasedPlanStatisticsCalculator
         implements StatsCalculator
 {
+    private static final com.facebook.airlift.log.Logger log = Logger.get(HistoryBasedPlanStatisticsCalculator.class);
+
     private final Supplier<HistoryBasedPlanStatisticsProvider> historyBasedPlanStatisticsProvider;
     private final HistoryBasedStatisticsCacheManager historyBasedStatisticsCacheManager;
     private final StatsCalculator delegate;
     private final PlanCanonicalInfoProvider planCanonicalInfoProvider;
+    private final Provider<DispatchManager> dispatchManagerProvider;
+    private final Provider<LocalQueryProvider> queryProvider;
+    private final Provider<QueryManager> queryManagerProvider;
+    private final Metadata metadata;
 
     public HistoryBasedPlanStatisticsCalculator(
             Supplier<HistoryBasedPlanStatisticsProvider> historyBasedPlanStatisticsProvider,
             HistoryBasedStatisticsCacheManager historyBasedStatisticsCacheManager,
             StatsCalculator delegate,
-            PlanCanonicalInfoProvider planCanonicalInfoProvider)
+            PlanCanonicalInfoProvider planCanonicalInfoProvider,
+            Provider<DispatchManager> dispatchManagerProvider,
+            Provider<LocalQueryProvider> queryProvider,
+            Provider<QueryManager> queryManagerProvider,
+            Metadata metadata)
     {
         this.historyBasedPlanStatisticsProvider = requireNonNull(historyBasedPlanStatisticsProvider, "historyBasedPlanStatisticsProvider is null");
         this.historyBasedStatisticsCacheManager = requireNonNull(historyBasedStatisticsCacheManager, "historyBasedStatisticsCacheManager is null");
         this.delegate = requireNonNull(delegate, "delegate is null");
         this.planCanonicalInfoProvider = requireNonNull(planCanonicalInfoProvider, "planHasher is null");
+        this.dispatchManagerProvider = dispatchManagerProvider;
+        this.queryProvider = queryProvider;
+        this.queryManagerProvider = queryManagerProvider;
+        this.metadata = metadata;
     }
 
     @Override
@@ -204,6 +242,53 @@ public class HistoryBasedPlanStatisticsCalculator
                                 return delegateStats.combineStats(
                                         predictedPlanStatistics,
                                         new HistoryBasedSourceInfo(entry.getKey().getHash(), inputTableStatistics, Optional.ofNullable(historicalPlanStatisticsEntry.get().getHistoricalPlanStatisticsEntryInfo())));
+                            }
+                        }
+                        else {
+                            try {
+                                DispatchManager dispatchManager = dispatchManagerProvider.get();
+                                LocalQueryProvider queryFactory = queryProvider.get();
+                                QueryId id = dispatchManager.createQueryId();
+                                String slug = randomUUID() + "_autogen";
+                                if (!(plan instanceof OutputNode)) {
+                                    AggregationNode aggNode = new AggregationNode(
+                                            Optional.empty(),
+                                            new PlanNodeId("autogen-count"),
+                                            plan,
+                                            ImmutableMap.of(new VariableReferenceExpression(Optional.empty(), "count", BIGINT),
+                                                    new AggregationNode.Aggregation(
+                                                            new CallExpression(
+                                                                    "count",
+                                                                    metadata.getFunctionAndTypeManager().lookupFunction("count", ImmutableList.of()),
+                                                                    BIGINT,
+                                                                    ImmutableList.of()),
+                                                            Optional.empty(),
+                                                            Optional.empty(),
+                                                            false,
+                                                            Optional.empty())),
+                                            new AggregationNode.GroupingSetDescriptor(ImmutableList.of(), 1, ImmutableSet.of(1)),
+                                            ImmutableList.of(),
+                                            AggregationNode.Step.SINGLE,
+                                            Optional.empty(),
+                                            Optional.empty(),
+                                            Optional.empty());
+                                    plan = new OutputNode(Optional.empty(), new PlanNodeId("autogen-output"), aggNode, ImmutableList.of(), ImmutableList.of());
+                                }
+
+                                String jsonPlan = jsonFragmentPlan(plan, VariablesExtractor.extractOutputVariables(plan), StatsAndCosts.empty(), metadata.getFunctionAndTypeManager(), session);
+                                Future<?> f = dispatchManager.createQuery(id, slug, 0, session.getSessionContext(), jsonPlan, Optional.of(plan));
+                                f.get(); // wait for creation
+                                dispatchManager.waitForDispatched(id).get();
+                                Query query = queryFactory.getQuery(id, slug);
+                                if (!(session.getSessionContext() instanceof HttpRequestSessionContext)) {
+                                    continue;
+                                }
+                                HttpRequestSessionContext requestSessionContext = (HttpRequestSessionContext) session.getSessionContext();
+                                Future<?> results = query.waitForResults(0, requestSessionContext.getUriInfo(), requestSessionContext.getUriInfo().getBaseUri().getScheme(), Duration.succinctDuration(10, SECONDS), succinctDataSize(1, DataSize.Unit.MEGABYTE), false);
+                                results.get();
+                            }
+                            catch (Exception e) {
+                                log.error("Failed to submit history query: " + e.getMessage(), e);
                             }
                         }
                     }

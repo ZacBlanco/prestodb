@@ -20,6 +20,7 @@ import com.facebook.presto.common.type.TimeZoneKey;
 import com.facebook.presto.cost.PlanCostEstimate;
 import com.facebook.presto.cost.PlanNodeStatsEstimate;
 import com.facebook.presto.metadata.SessionPropertyManager;
+import com.facebook.presto.server.SessionContext;
 import com.facebook.presto.spi.ConnectorId;
 import com.facebook.presto.spi.ConnectorSession;
 import com.facebook.presto.spi.PrestoException;
@@ -99,6 +100,7 @@ public final class Session
     private final Optional<Tracer> tracer;
     private final WarningCollector warningCollector;
     private final RuntimeStats runtimeStats;
+    private final SessionContext sessionContext;
 
     private final OptimizerInformationCollector optimizerInformationCollector = new OptimizerInformationCollector();
     private final OptimizerResultCollector optimizerResultCollector = new OptimizerResultCollector();
@@ -131,7 +133,8 @@ public final class Session
             Map<SqlFunctionId, SqlInvokedFunction> sessionFunctions,
             Optional<Tracer> tracer,
             WarningCollector warningCollector,
-            RuntimeStats runtimeStats)
+            RuntimeStats runtimeStats,
+            SessionContext sessionContext)
     {
         this.queryId = requireNonNull(queryId, "queryId is null");
         this.transactionId = requireNonNull(transactionId, "transactionId is null");
@@ -173,6 +176,7 @@ public final class Session
         this.warningCollector = requireNonNull(warningCollector, "warningCollector is null");
         this.runtimeStats = requireNonNull(runtimeStats, "runtimeStats is null");
         this.context = new AccessControlContext(queryId, clientInfo, clientTags, source, warningCollector, runtimeStats);
+        this.sessionContext = sessionContext;
     }
 
     public QueryId getQueryId()
@@ -259,6 +263,11 @@ public final class Session
     {
         checkState(transactionId.isPresent(), "Not in a transaction");
         return transactionId.get();
+    }
+
+    public SessionContext getSessionContext()
+    {
+        return sessionContext;
     }
 
     public boolean isClientTransactionSupport()
@@ -447,7 +456,8 @@ public final class Session
                 sessionFunctions,
                 tracer,
                 warningCollector,
-                runtimeStats);
+                runtimeStats,
+                sessionContext);
     }
 
     public Session withDefaultProperties(
@@ -503,7 +513,8 @@ public final class Session
                 sessionFunctions,
                 tracer,
                 warningCollector,
-                runtimeStats);
+                runtimeStats,
+                sessionContext);
     }
 
     public ConnectorSession toConnectorSession()
@@ -632,6 +643,7 @@ public final class Session
         private final Map<SqlFunctionId, SqlInvokedFunction> sessionFunctions = new HashMap<>();
         private WarningCollector warningCollector = WarningCollector.NOOP;
         private RuntimeStats runtimeStats = new RuntimeStats();
+        private SessionContext sessionContext;
 
         private SessionBuilder(SessionPropertyManager sessionPropertyManager)
         {
@@ -665,6 +677,7 @@ public final class Session
             this.tracer = requireNonNull(session.tracer, "tracer is null");
             this.warningCollector = requireNonNull(session.warningCollector, "warningCollector is null");
             this.runtimeStats = requireNonNull(session.runtimeStats, "runtimeStats is null");
+            this.sessionContext = requireNonNull(session.sessionContext, "sessionContext is null");
         }
 
         public SessionBuilder setQueryId(QueryId queryId)
@@ -701,6 +714,12 @@ public final class Session
         public SessionBuilder setLocale(Locale locale)
         {
             this.locale = locale;
+            return this;
+        }
+
+        public SessionBuilder setSessionContext(SessionContext sessionContext)
+        {
+            this.sessionContext = sessionContext;
             return this;
         }
 
@@ -853,7 +872,8 @@ public final class Session
                     sessionFunctions,
                     tracer,
                     warningCollector,
-                    runtimeStats);
+                    runtimeStats,
+                    sessionContext);
         }
     }
 

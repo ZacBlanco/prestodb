@@ -82,7 +82,7 @@ public class TestHiveHistoryBasedStatsTracking
     @BeforeMethod(alwaysRun = true)
     public void setUp()
     {
-        getHistoryProvider().clearCache();
+        getHistoryProvider().clear();
     }
 
     private InMemoryHistoryBasedPlanStatisticsProvider getHistoryProvider()

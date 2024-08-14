@@ -139,4 +139,10 @@ public class RedisPlanStatisticsProvider
     {
         commands = cmds;
     }
+
+    @Override
+    public void clear()
+    {
+        throw new UnsupportedOperationException("clear stats is not supported with the redis statistics provider");
+    }
 }

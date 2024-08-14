@@ -34,14 +34,19 @@ import com.facebook.presto.server.SessionSupplier;
 import com.facebook.presto.server.security.SecurityConfig;
 import com.facebook.presto.spi.PrestoException;
 import com.facebook.presto.spi.QueryId;
+import com.facebook.presto.spi.WarningCollector;
 import com.facebook.presto.spi.analyzer.AnalyzerOptions;
 import com.facebook.presto.spi.analyzer.AnalyzerProvider;
+import com.facebook.presto.spi.plan.PlanNode;
 import com.facebook.presto.spi.resourceGroups.SelectionContext;
 import com.facebook.presto.spi.resourceGroups.SelectionCriteria;
 import com.facebook.presto.spi.security.AccessControl;
 import com.facebook.presto.spi.security.AuthorizedIdentity;
 import com.facebook.presto.sql.analyzer.AnalyzerProviderManager;
+import com.facebook.presto.sql.analyzer.preplanned.PrePlannedAnalyzerOptions;
+import com.facebook.presto.sql.analyzer.preplanned.PrePlannedQueryAnalyzerProvider;
 import com.facebook.presto.transaction.TransactionManager;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.AbstractFuture;
 import com.google.common.util.concurrent.ListenableFuture;
 import org.weakref.jmx.Flatten;
@@ -98,7 +103,7 @@ public class DispatchManager
 
     /**
      * Dispatch Manager is used for the pre-queuing part of queries prior to the query execution phase.
-     *
+     * <p>
      * Dispatch Manager object is instantiated when the presto server is launched by server bootstrap time. It is a critical component in resource management section of the query.
      *
      * @param queryIdGenerator query ID generator for generating a new query ID when a query is created
@@ -188,7 +193,7 @@ public class DispatchManager
 
     /**
      * Create a query id
-     *
+     * <p>
      * This method is called when a {@code Query} object is created
      *
      * @return {@link QueryId}
@@ -237,13 +242,14 @@ public class DispatchManager
      * @param retryCount per-query retry limit due to communication failures
      * @param sessionContext the raw session context
      * @param query the query in String
+     * @param root if executing a specific query plan, the root of that plan.
      * @return the listenable future
      * @see ResourceGroupManager <a href="https://prestodb.io/docs/current/admin/resource-groups.html">Resource Groups</a>
      */
-    public ListenableFuture<?> createQuery(QueryId queryId, String slug, int retryCount, SessionContext sessionContext, String query)
+    public ListenableFuture<?> createQuery(QueryId queryId, String slug, int retryCount, SessionContext sessionContext, String query, Optional<PlanNode> root)
     {
         requireNonNull(queryId, "queryId is null");
-        requireNonNull(sessionContext, "sessionFactory is null");
+        requireNonNull(sessionContext, "sessionContext is null");
         requireNonNull(query, "query is null");
         checkArgument(!query.isEmpty(), "query must not be empty string");
         checkArgument(!queryTracker.tryGetQuery(queryId).isPresent(), "query %s already exists", queryId);
@@ -251,7 +257,7 @@ public class DispatchManager
         DispatchQueryCreationFuture queryCreationFuture = new DispatchQueryCreationFuture();
         boundedQueryExecutor.execute(() -> {
             try {
-                createQueryInternal(queryId, slug, retryCount, sessionContext, query, resourceGroupManager);
+                createQueryInternal(queryId, slug, retryCount, sessionContext, query, resourceGroupManager, root);
             }
             finally {
                 queryCreationFuture.set(null);
@@ -264,7 +270,7 @@ public class DispatchManager
      * Creates and registers a dispatch query with the query tracker.  This method will never fail to register a query with the query
      * tracker. If an error occurs while creating a dispatch query, a failed dispatch will be created and registered.
      */
-    private <C> void createQueryInternal(QueryId queryId, String slug, int retryCount, SessionContext sessionContext, String query, ResourceGroupManager<C> resourceGroupManager)
+    private <C> void createQueryInternal(QueryId queryId, String slug, int retryCount, SessionContext sessionContext, String query, ResourceGroupManager<C> resourceGroupManager, Optional<PlanNode> root)
     {
         Session session = null;
         PreparedQuery preparedQuery;
@@ -287,11 +293,19 @@ public class DispatchManager
             // prepare query
             AnalyzerOptions analyzerOptions = createAnalyzerOptions(session, session.getWarningCollector());
             AnalyzerProvider analyzerProvider = analyzerProviderManager.getAnalyzerProvider(getAnalyzerType(session));
-            preparedQuery = analyzerProvider.getQueryPreparer().prepareQuery(analyzerOptions, query, session.getPreparedStatements(), session.getWarningCollector());
+            Optional<QueryType> queryType;
+
+            if (!root.isPresent()) {
+                preparedQuery = analyzerProvider.getQueryPreparer().prepareQuery(analyzerOptions, query, session.getPreparedStatements(), session.getWarningCollector());
+            }
+            else {
+                analyzerProvider = analyzerProviderManager.getAnalyzerProvider(PrePlannedQueryAnalyzerProvider.PREPLANNED_ANALYZER);
+                preparedQuery = analyzerProvider.getQueryPreparer().prepareQuery(new PrePlannedAnalyzerOptions(analyzerOptions, root.get()), query, ImmutableMap.of(), WarningCollector.NOOP);
+            }
             query = preparedQuery.getFormattedQuery().orElse(query);
+            queryType = preparedQuery.getQueryType();
 
             // select resource group
-            Optional<QueryType> queryType = preparedQuery.getQueryType();
             SelectionContext<C> selectionContext = resourceGroupManager.selectGroup(new SelectionCriteria(
                     sessionContext.getIdentity().getPrincipal().isPresent(),
                     sessionContext.getIdentity().getUser(),
@@ -307,7 +321,7 @@ public class DispatchManager
             session = sessionPropertyDefaults.newSessionWithDefaultProperties(session, queryType.map(Enum::name), Optional.of(selectionContext.getResourceGroupId()));
 
             // mark existing transaction as active
-            transactionManager.activateTransaction(session, preparedQuery.isTransactionControlStatement(), accessControl);
+            transactionManager.activateTransaction(session, preparedQuery != null && preparedQuery.isTransactionControlStatement(), accessControl);
 
             DispatchQuery dispatchQuery = dispatchQueryFactory.createDispatchQuery(
                     session,
@@ -319,7 +333,8 @@ public class DispatchManager
                     selectionContext.getResourceGroupId(),
                     queryType,
                     session.getWarningCollector(),
-                    (dq) -> resourceGroupManager.submit(dq, selectionContext, queryExecutor));
+                    (dq) -> resourceGroupManager.submit(dq, selectionContext, queryExecutor),
+                    root);
 
             boolean queryAdded = queryCreated(dispatchQuery);
             if (queryAdded && !dispatchQuery.isDone()) {
@@ -383,7 +398,6 @@ public class DispatchManager
 
     /**
      * Return a list of {@link BasicQueryInfo}.
-     *
      */
     public List<BasicQueryInfo> getQueries()
     {

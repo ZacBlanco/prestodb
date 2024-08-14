@@ -29,7 +29,7 @@ public class AnalyzerOptions
     private final WarningHandlingLevel warningHandlingLevel;
     private final WarningCollector warningCollector;
 
-    private AnalyzerOptions(
+    protected AnalyzerOptions(
             boolean isParseDecimalLiteralsAsDouble,
             boolean isLogFormattedQueryEnabled,
             WarningCollector warningCollector,

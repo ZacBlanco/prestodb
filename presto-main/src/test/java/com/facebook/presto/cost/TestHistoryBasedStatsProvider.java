@@ -137,6 +137,12 @@ public class TestHistoryBasedStatsProvider
         }
 
         @Override
+        public void clear()
+        {
+            // no op
+        }
+
+        @Override
         public void putStats(Map<PlanNodeWithHash, HistoricalPlanStatistics> hashesAndStatistics) {}
     }
 }

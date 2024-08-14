@@ -191,6 +191,7 @@ public class QueuedStatementResource
      * Presto performs lazy execution. The submission of a query returns
      * a placeholder for the result set, but the query gets
      * scheduled/dispatched only when the client polls for results
+     *
      * @param statement The statement or sql query string submitted
      * @param xForwardedProto Forwarded protocol (http or https)
      * @param servletRequest The http request
@@ -218,6 +219,7 @@ public class QueuedStatementResource
         //       will be needed instead of creating a new trace here.
         SessionContext sessionContext = new HttpRequestSessionContext(
                 servletRequest,
+                uriInfo,
                 sqlParserOptions,
                 tracerProviderManager.getTracerProvider(),
                 Optional.of(sessionPropertyManager));
@@ -229,6 +231,7 @@ public class QueuedStatementResource
 
     /**
      * HTTP endpoint for re-processing a failed query
+     *
      * @param queryId Query Identifier of the query to be retried
      * @param xForwardedProto Forwarded protocol (http or https)
      * @param uriInfo {@link javax.ws.rs.core.UriInfo}
@@ -278,6 +281,7 @@ public class QueuedStatementResource
 
     /**
      * HTTP endpoint for retrieving the status of a submitted query
+     *
      * @param queryId Query Identifier of query whose status is polled
      * @param token Monotonically increasing token that identifies the next batch of query results
      * @param slug Unique security token generated for each query that controls access to that query's results
@@ -327,6 +331,7 @@ public class QueuedStatementResource
 
     /**
      * HTTP endpoint to cancel execution of a query in flight
+     *
      * @param queryId Query Identifier of query to be canceled
      * @param token Monotonically increasing token that identifies the next batch of query results
      * @param slug Unique security token generated for each query that controls access to that query's results
@@ -536,7 +541,7 @@ public class QueuedStatementResource
             // if query submission has not finished, wait for it to finish
             synchronized (this) {
                 if (querySubmissionFuture == null) {
-                    querySubmissionFuture = dispatchManager.createQuery(queryId, slug, retryCount, sessionContext, query);
+                    querySubmissionFuture = dispatchManager.createQuery(queryId, slug, retryCount, sessionContext, query, Optional.empty());
                 }
                 if (!querySubmissionFuture.isDone()) {
                     return querySubmissionFuture;
@@ -548,6 +553,7 @@ public class QueuedStatementResource
 
         /**
          * Returns a placeholder for query results for the client to poll
+         *
          * @param uriInfo {@link javax.ws.rs.core.UriInfo}
          * @param xForwardedProto Forwarded protocol (http or https)
          * @return {@link com.facebook.presto.client.QueryResults}

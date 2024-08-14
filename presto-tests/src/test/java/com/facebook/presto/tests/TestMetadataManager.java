@@ -133,7 +133,7 @@ public class TestMetadataManager
                 "slug",
                 0,
                 new TestingSessionContext(TEST_SESSION),
-                "SELECT * FROM lineitem")
+                "SELECT * FROM lineitem", Optional.empty())
                 .get();
 
         // wait until query starts running

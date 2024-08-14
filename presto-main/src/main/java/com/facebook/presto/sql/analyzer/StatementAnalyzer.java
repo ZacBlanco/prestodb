@@ -1401,6 +1401,7 @@ class StatementAnalyzer
             }
             throw new SemanticException(NOT_SUPPORTED, "Table version type %s not supported." + type);
         }
+
         private Optional<TableHandle> processTableVersion(Table table, QualifiedObjectName name, Optional<Scope> scope)
         {
             Expression stateExpr = table.getTableVersionExpression().get().getStateExpression();

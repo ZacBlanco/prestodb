@@ -15,6 +15,7 @@ package com.facebook.presto.sql.analyzer;
 
 import com.facebook.presto.spi.PrestoException;
 import com.facebook.presto.spi.analyzer.AnalyzerProvider;
+import com.facebook.presto.sql.analyzer.preplanned.PrePlannedQueryAnalyzerProvider;
 
 import javax.inject.Inject;
 
@@ -30,10 +31,12 @@ public class AnalyzerProviderManager
     private final Map<String, AnalyzerProvider> analyzerProviders = new HashMap<>();
 
     @Inject
-    public AnalyzerProviderManager(BuiltInAnalyzerProvider analyzerProvider)
+    public AnalyzerProviderManager(BuiltInAnalyzerProvider analyzerProvider,
+            PrePlannedQueryAnalyzerProvider prePlannedQueryAnalyzerProvider)
     {
         // Initializing builtin analyzer by default.
         addAnalyzerProvider(analyzerProvider);
+        addAnalyzerProvider(prePlannedQueryAnalyzerProvider);
     }
 
     public void addAnalyzerProvider(AnalyzerProvider analyzerProvider)

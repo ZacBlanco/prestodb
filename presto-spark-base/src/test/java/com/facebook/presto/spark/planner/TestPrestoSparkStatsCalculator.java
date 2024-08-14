@@ -107,7 +107,7 @@ public class TestPrestoSparkStatsCalculator
     @AfterMethod(alwaysRun = true)
     public void resetCaches()
     {
-        ((InMemoryHistoryBasedPlanStatisticsProvider) historyBasedPlanStatisticsCalculator.getHistoryBasedPlanStatisticsProvider().get()).clearCache();
+        ((InMemoryHistoryBasedPlanStatisticsProvider) historyBasedPlanStatisticsCalculator.getHistoryBasedPlanStatisticsProvider().get()).clear();
         fragmentStatsProvider.invalidateStats(TEST_QUERY_ID, 1);
     }
 

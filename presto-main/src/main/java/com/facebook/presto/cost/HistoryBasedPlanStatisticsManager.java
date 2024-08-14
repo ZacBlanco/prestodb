@@ -16,8 +16,11 @@ package com.facebook.presto.cost;
 import com.facebook.presto.Session;
 import com.facebook.presto.client.NodeVersion;
 import com.facebook.presto.common.plan.PlanCanonicalizationStrategy;
+import com.facebook.presto.dispatcher.DispatchManager;
+import com.facebook.presto.execution.QueryManager;
 import com.facebook.presto.metadata.Metadata;
 import com.facebook.presto.metadata.SessionPropertyManager;
+import com.facebook.presto.server.protocol.LocalQueryProvider;
 import com.facebook.presto.spi.statistics.EmptyPlanStatisticsProvider;
 import com.facebook.presto.spi.statistics.HistoryBasedPlanStatisticsProvider;
 import com.facebook.presto.sql.analyzer.FeaturesConfig;
@@ -27,6 +30,7 @@ import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.google.inject.Inject;
+import com.google.inject.Provider;
 
 import java.util.List;
 
@@ -68,9 +72,9 @@ public class HistoryBasedPlanStatisticsManager
         statisticsProviderAdded = true;
     }
 
-    public HistoryBasedPlanStatisticsCalculator getHistoryBasedPlanStatisticsCalculator(StatsCalculator delegate)
+    public HistoryBasedPlanStatisticsCalculator getHistoryBasedPlanStatisticsCalculator(StatsCalculator delegate, Provider<DispatchManager> dispatchManagerProvider, Provider<LocalQueryProvider> queryProvider, Provider<QueryManager> queryManagerProvider, Metadata metadata)
     {
-        return new HistoryBasedPlanStatisticsCalculator(() -> historyBasedPlanStatisticsProvider, historyBasedStatisticsCacheManager, delegate, planCanonicalInfoProvider);
+        return new HistoryBasedPlanStatisticsCalculator(() -> historyBasedPlanStatisticsProvider, historyBasedStatisticsCacheManager, delegate, planCanonicalInfoProvider, dispatchManagerProvider, queryProvider, queryManagerProvider, metadata);
     }
 
     public HistoryBasedPlanStatisticsTracker getHistoryBasedPlanStatisticsTracker()

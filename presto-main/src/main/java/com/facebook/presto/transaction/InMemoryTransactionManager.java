@@ -480,7 +480,7 @@ public class InMemoryTransactionManager
         private synchronized CatalogMetadata getTransactionCatalogMetadata(ConnectorId connectorId)
         {
             checkOpenTransaction();
-
+            Optional<ConnectorId> id = getConnectorId(connectorId.getCatalogName()); // register catalog?
             CatalogMetadata catalogMetadata = this.catalogMetadata.get(connectorId);
             if (catalogMetadata == null) {
                 Catalog catalog = catalogsByConnectorId.get(connectorId);

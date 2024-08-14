@@ -75,7 +75,7 @@ public class TestPrestoNativeHistoryBasedStatistics
     @BeforeMethod(alwaysRun = true)
     public void setUp()
     {
-        getHistoryProvider().clearCache();
+        getHistoryProvider().clear();
     }
 
     @Test

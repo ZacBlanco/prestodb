@@ -43,6 +43,12 @@ public class EmptyPlanStatisticsProvider
         // no op
     }
 
+    @Override
+    public void clear()
+    {
+        // no op
+    }
+
     public static EmptyPlanStatisticsProvider getInstance()
     {
         return SINGLETON;

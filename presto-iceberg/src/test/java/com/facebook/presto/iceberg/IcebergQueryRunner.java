@@ -29,11 +29,15 @@ import com.facebook.presto.hive.authentication.NoHdfsAuthentication;
 import com.facebook.presto.hive.metastore.ExtendedHiveMetastore;
 import com.facebook.presto.hive.metastore.MetastoreContext;
 import com.facebook.presto.hive.metastore.file.FileHiveMetastore;
+import com.facebook.presto.spi.Plugin;
 import com.facebook.presto.spi.PrestoException;
 import com.facebook.presto.spi.WarningCollector;
+import com.facebook.presto.spi.statistics.HistoryBasedPlanStatisticsProvider;
+import com.facebook.presto.testing.InMemoryHistoryBasedPlanStatisticsProvider;
 import com.facebook.presto.tests.DistributedQueryRunner;
 import com.facebook.presto.tpcds.TpcdsPlugin;
 import com.facebook.presto.tpch.TpchPlugin;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import io.airlift.tpch.TpchTable;
@@ -169,13 +173,27 @@ public final class IcebergQueryRunner
                 .setSchema("tpch")
                 .build();
 
+        Map<String, String> queryRunnerProperties = ImmutableMap.<String, String>builder()
+                .putAll(extraProperties)
+                .put("optimizer.use-history-based-plan-statistics", "true")
+                .put("optimizer.track-history-based-plan-statistics", "true")
+                .build();
+
         DistributedQueryRunner queryRunner = DistributedQueryRunner.builder(session)
-                .setExtraProperties(extraProperties)
+                .setExtraProperties(queryRunnerProperties)
                 .setDataDirectory(dataDirectory)
                 .setNodeCount(nodeCount.orElse(4))
                 .setExternalWorkerLauncher(externalWorkerLauncher)
                 .build();
 
+        queryRunner.installPlugin(new Plugin()
+        {
+            @Override
+            public Iterable<HistoryBasedPlanStatisticsProvider> getHistoryBasedPlanStatisticsProviders()
+            {
+                return ImmutableList.of(new InMemoryHistoryBasedPlanStatisticsProvider());
+            }
+        });
         queryRunner.installPlugin(new TpchPlugin());
         queryRunner.createCatalog("tpch", "tpch");
 

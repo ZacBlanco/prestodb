@@ -16,7 +16,6 @@ package com.facebook.presto.testing;
 import com.facebook.presto.spi.plan.PlanNodeWithHash;
 import com.facebook.presto.spi.statistics.HistoricalPlanStatistics;
 import com.facebook.presto.spi.statistics.HistoryBasedPlanStatisticsProvider;
-import com.google.common.annotations.VisibleForTesting;
 
 import java.util.List;
 import java.util.Map;
@@ -43,7 +42,7 @@ public class InMemoryHistoryBasedPlanStatisticsProvider
     @Override
     public String getName()
     {
-        return "test";
+        return "in-memory";
     }
 
     @Override
@@ -91,8 +90,8 @@ public class InMemoryHistoryBasedPlanStatisticsProvider
         }
     }
 
-    @VisibleForTesting
-    public void clearCache()
+    @Override
+    public void clear()
     {
         cache.clear();
     }

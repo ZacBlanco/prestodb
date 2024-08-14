@@ -33,6 +33,7 @@ import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
 
 import java.util.List;
+import java.util.Optional;
 
 import static com.facebook.presto.SessionTestUtils.TEST_SESSION;
 import static com.facebook.presto.execution.QueryState.FAILED;
@@ -99,7 +100,8 @@ public class TestQueryManager
                         "slug",
                         0,
                         new TestingSessionContext(TEST_SESSION),
-                        LONG_LASTING_QUERY)
+                        LONG_LASTING_QUERY,
+                        Optional.empty())
                 .get();
 
         // wait until query starts running
@@ -144,7 +146,8 @@ public class TestQueryManager
                         "slug",
                         0,
                         new TestingSessionContext(TEST_SESSION),
-                        LONG_LASTING_QUERY)
+                        LONG_LASTING_QUERY,
+                        Optional.empty())
                 .get();
 
         //Wait for query to be in queued state
@@ -181,7 +184,8 @@ public class TestQueryManager
                             "slug",
                             0,
                             new TestingSessionContext(TEST_SESSION),
-                            LONG_LASTING_QUERY)
+                            LONG_LASTING_QUERY,
+                            Optional.empty())
                     .get();
         }
     }

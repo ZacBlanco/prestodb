@@ -40,4 +40,9 @@ public interface HistoryBasedPlanStatisticsProvider
      * Given plan hashes and corresponding statistics after a query is run, store them for future retrieval.
      */
     void putStats(Map<PlanNodeWithHash, HistoricalPlanStatistics> hashesAndStatistics);
+
+    /**
+     * Removes all history statistics from the provider
+     */
+    void clear();
 }

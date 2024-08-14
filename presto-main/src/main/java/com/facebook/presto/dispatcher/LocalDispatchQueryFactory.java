@@ -29,6 +29,7 @@ import com.facebook.presto.metadata.Metadata;
 import com.facebook.presto.spi.PrestoException;
 import com.facebook.presto.spi.WarningCollector;
 import com.facebook.presto.spi.analyzer.AnalyzerProvider;
+import com.facebook.presto.spi.plan.PlanNode;
 import com.facebook.presto.spi.resourceGroups.ResourceGroupId;
 import com.facebook.presto.spi.security.AccessControl;
 import com.facebook.presto.tracing.NoopTracerProvider;
@@ -139,7 +140,8 @@ public class LocalDispatchQueryFactory
             ResourceGroupId resourceGroup,
             Optional<QueryType> queryType,
             WarningCollector warningCollector,
-            Consumer<DispatchQuery> queryQueuer)
+            Consumer<DispatchQuery> queryQueuer,
+            Optional<PlanNode> planRoot)
     {
         QueryStateMachine stateMachine = QueryStateMachine.begin(
                 query,
@@ -164,7 +166,8 @@ public class LocalDispatchQueryFactory
                 throw new PrestoException(NOT_SUPPORTED, "Unsupported statement type: " + preparedQuery.getStatementClass().getSimpleName());
             }
 
-            return queryExecutionFactory.createQueryExecution(analyzerProvider, preparedQuery, stateMachine, slug, retryCount, warningCollector, queryType);
+            QueryExecution execution = queryExecutionFactory.createQueryExecution(analyzerProvider, preparedQuery, stateMachine, slug, retryCount, warningCollector, queryType);
+            return execution;
         });
 
         return new LocalDispatchQuery(

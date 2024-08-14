@@ -13,6 +13,7 @@
  */
 package com.facebook.presto.connector.system;
 
+import com.facebook.presto.connector.ClearHistoryBasedStatisticsProcedure;
 import com.facebook.presto.connector.ConnectorManager;
 import com.facebook.presto.connector.system.jdbc.AttributeJdbcTable;
 import com.facebook.presto.connector.system.jdbc.CatalogJdbcTable;
@@ -75,6 +76,7 @@ public class SystemConnectorModule
         Multibinder.newSetBinder(binder, Procedure.class);
 
         binder.bind(KillQueryProcedure.class).in(Scopes.SINGLETON);
+        binder.bind(ClearHistoryBasedStatisticsProcedure.class).in(Scopes.SINGLETON);
 
         binder.bind(GlobalSystemConnectorFactory.class).in(Scopes.SINGLETON);
         binder.bind(SystemConnectorRegistrar.class).asEagerSingleton();
@@ -82,6 +84,12 @@ public class SystemConnectorModule
 
     @ProvidesIntoSet
     public static Procedure getKillQueryProcedure(KillQueryProcedure procedure)
+    {
+        return procedure.getProcedure();
+    }
+
+    @ProvidesIntoSet
+    public static Procedure getClearHboProcedure(ClearHistoryBasedStatisticsProcedure procedure)
     {
         return procedure.getProcedure();
     }

@@ -18,6 +18,7 @@ import com.facebook.presto.common.analyzer.PreparedQuery;
 import com.facebook.presto.common.resourceGroups.QueryType;
 import com.facebook.presto.spi.WarningCollector;
 import com.facebook.presto.spi.analyzer.AnalyzerProvider;
+import com.facebook.presto.spi.plan.PlanNode;
 import com.facebook.presto.spi.resourceGroups.ResourceGroupId;
 
 import java.util.Optional;
@@ -53,5 +54,6 @@ public interface DispatchQueryFactory
             ResourceGroupId resourceGroup,
             Optional<QueryType> queryType,
             WarningCollector warningCollector,
-            Consumer<DispatchQuery> queryQueuer);
+            Consumer<DispatchQuery> queryQueuer,
+            Optional<PlanNode> planRoot);
 }
