@@ -127,10 +127,12 @@ import static com.facebook.presto.iceberg.ExpressionConverter.toIcebergExpressio
 import static com.facebook.presto.iceberg.FileContent.POSITION_DELETES;
 import static com.facebook.presto.iceberg.FileContent.fromIcebergFileContent;
 import static com.facebook.presto.iceberg.FileFormat.PARQUET;
+import static com.facebook.presto.iceberg.HiveTableOperations.COLUMN_CONSTRAINTS;
 import static com.facebook.presto.iceberg.IcebergErrorCode.ICEBERG_INVALID_FORMAT_VERSION;
 import static com.facebook.presto.iceberg.IcebergErrorCode.ICEBERG_INVALID_PARTITION_VALUE;
 import static com.facebook.presto.iceberg.IcebergErrorCode.ICEBERG_INVALID_SNAPSHOT_ID;
 import static com.facebook.presto.iceberg.IcebergErrorCode.ICEBERG_INVALID_TABLE_TIMESTAMP;
+import static com.facebook.presto.iceberg.IcebergHiveMetadata.constraintsCodec;
 import static com.facebook.presto.iceberg.IcebergPartitionType.IDENTITY;
 import static com.facebook.presto.iceberg.IcebergSessionProperties.getCompressionCodec;
 import static com.facebook.presto.iceberg.IcebergSessionProperties.isMergeOnReadModeEnabled;
@@ -798,10 +800,10 @@ public final class IcebergUtil
      * @param requestedSchema If provided, only delete files with this schema will be provided
      */
     public static CloseableIterable<DeleteFile> getDeleteFiles(Table table,
-                                                               long snapshot,
-                                                               TupleDomain<IcebergColumnHandle> filter,
-                                                               Optional<Set<Integer>> requestedPartitionSpec,
-                                                               Optional<Set<Integer>> requestedSchema)
+            long snapshot,
+            TupleDomain<IcebergColumnHandle> filter,
+            Optional<Set<Integer>> requestedPartitionSpec,
+            Optional<Set<Integer>> requestedSchema)
     {
         Expression filterExpression = toIcebergExpression(filter);
         CloseableIterable<FileScanTask> fileTasks = table.newScan().useSnapshot(snapshot).filter(filterExpression).planFiles();
@@ -977,9 +979,9 @@ public final class IcebergUtil
         private DeleteFile currentFile;
 
         private DeleteFilesIterator(Map<Integer, PartitionSpec> partitionSpecsById,
-                                    CloseableIterator<FileScanTask> fileTasks,
-                                    Optional<Set<Integer>> requestedPartitionSpec,
-                                    Optional<Set<Integer>> requestedSchema)
+                CloseableIterator<FileScanTask> fileTasks,
+                Optional<Set<Integer>> requestedPartitionSpec,
+                Optional<Set<Integer>> requestedSchema)
         {
             this.partitionSpecsById = partitionSpecsById;
             this.fileTasks = fileTasks;
@@ -1090,6 +1092,8 @@ public final class IcebergUtil
 
         Boolean metadataDeleteAfterCommit = IcebergTableProperties.isMetadataDeleteAfterCommit(tableMetadata.getProperties());
         propertiesBuilder.put(METADATA_DELETE_AFTER_COMMIT_ENABLED, String.valueOf(metadataDeleteAfterCommit));
+        String constraints = constraintsCodec().toJson(tableMetadata.getTableConstraintsHolder().getTableConstraints());
+        propertiesBuilder.put(COLUMN_CONSTRAINTS, constraints);
         return propertiesBuilder.build();
     }
 
@@ -1153,8 +1157,8 @@ public final class IcebergUtil
 
     /**
      * Get the metadata location for target {@link Table},
-     *  considering iceberg table properties {@code WRITE_METADATA_LOCATION}
-     * */
+     * considering iceberg table properties {@code WRITE_METADATA_LOCATION}
+     */
     public static String metadataLocation(Table icebergTable)
     {
         String metadataLocation = icebergTable.properties().get(TableProperties.WRITE_METADATA_LOCATION);
@@ -1169,8 +1173,8 @@ public final class IcebergUtil
 
     /**
      * Get the data location for target {@link Table},
-     *  considering iceberg table properties {@code WRITE_DATA_LOCATION}, {@code OBJECT_STORE_PATH} and {@code WRITE_FOLDER_STORAGE_LOCATION}
-     * */
+     * considering iceberg table properties {@code WRITE_DATA_LOCATION}, {@code OBJECT_STORE_PATH} and {@code WRITE_FOLDER_STORAGE_LOCATION}
+     */
     public static String dataLocation(Table icebergTable)
     {
         Map<String, String> properties = icebergTable.properties();

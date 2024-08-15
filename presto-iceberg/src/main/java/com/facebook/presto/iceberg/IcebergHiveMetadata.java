@@ -34,7 +34,9 @@ import com.facebook.presto.hive.metastore.PartitionStatistics;
 import com.facebook.presto.hive.metastore.PrestoTableType;
 import com.facebook.presto.hive.metastore.PrincipalPrivileges;
 import com.facebook.presto.hive.metastore.Table;
+import com.facebook.presto.iceberg.changelog.ChangelogUtil;
 import com.facebook.presto.spi.ColumnHandle;
+import com.facebook.presto.spi.ColumnMetadata;
 import com.facebook.presto.spi.ConnectorNewTableLayout;
 import com.facebook.presto.spi.ConnectorOutputTableHandle;
 import com.facebook.presto.spi.ConnectorSession;
@@ -49,6 +51,7 @@ import com.facebook.presto.spi.SchemaTableName;
 import com.facebook.presto.spi.SchemaTablePrefix;
 import com.facebook.presto.spi.TableNotFoundException;
 import com.facebook.presto.spi.ViewNotFoundException;
+import com.facebook.presto.spi.constraints.TableConstraint;
 import com.facebook.presto.spi.function.StandardFunctionResolution;
 import com.facebook.presto.spi.plan.FilterStatsCalculatorService;
 import com.facebook.presto.spi.relation.RowExpression;
@@ -66,6 +69,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableMultimap;
 import com.google.common.collect.ImmutableSet;
+import com.google.common.reflect.TypeToken;
 import org.apache.hadoop.fs.Path;
 import org.apache.iceberg.BaseMetastoreTableOperations;
 import org.apache.iceberg.PartitionSpec;
@@ -74,6 +78,7 @@ import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.TableMetadataParser;
 import org.apache.iceberg.TableOperations;
 import org.apache.iceberg.io.InputFile;
+import org.codehaus.jackson.type.TypeReference;
 import org.joda.time.DateTimeZone;
 
 import java.io.IOException;
@@ -105,6 +110,8 @@ import static com.facebook.presto.hive.metastore.MetastoreUtil.isUserDefinedType
 import static com.facebook.presto.hive.metastore.MetastoreUtil.verifyAndPopulateViews;
 import static com.facebook.presto.hive.metastore.Statistics.createComputedStatisticsToPartitionMap;
 import static com.facebook.presto.iceberg.HiveTableOperations.STORAGE_FORMAT;
+import static com.facebook.presto.iceberg.IcebergColumnHandle.DATA_SEQUENCE_NUMBER_COLUMN_METADATA;
+import static com.facebook.presto.iceberg.IcebergColumnHandle.PATH_COLUMN_METADATA;
 import static com.facebook.presto.iceberg.IcebergErrorCode.ICEBERG_INVALID_METADATA;
 import static com.facebook.presto.iceberg.IcebergSchemaProperties.getSchemaLocation;
 import static com.facebook.presto.iceberg.IcebergSessionProperties.getCompressionCodec;
@@ -112,10 +119,12 @@ import static com.facebook.presto.iceberg.IcebergSessionProperties.getHiveStatis
 import static com.facebook.presto.iceberg.IcebergTableProperties.getFileFormat;
 import static com.facebook.presto.iceberg.IcebergTableProperties.getPartitioning;
 import static com.facebook.presto.iceberg.IcebergTableProperties.getTableLocation;
+import static com.facebook.presto.iceberg.IcebergTableType.CHANGELOG;
 import static com.facebook.presto.iceberg.IcebergTableType.DATA;
 import static com.facebook.presto.iceberg.IcebergUtil.createIcebergViewProperties;
 import static com.facebook.presto.iceberg.IcebergUtil.getColumns;
 import static com.facebook.presto.iceberg.IcebergUtil.getHiveIcebergTable;
+import static com.facebook.presto.iceberg.IcebergUtil.getTableComment;
 import static com.facebook.presto.iceberg.IcebergUtil.isIcebergTable;
 import static com.facebook.presto.iceberg.IcebergUtil.populateTableProperties;
 import static com.facebook.presto.iceberg.IcebergUtil.toHiveColumns;
@@ -322,6 +331,12 @@ public class IcebergHiveMetadata
                 fileFormat,
                 getCompressionCodec(session),
                 metadata.properties());
+    }
+
+    protected static JsonCodec<List<TableConstraint<String>>> constraintsCodec()
+    {
+        TypeReference<List<TableConstraint<String>>> typeReference = new TypeReference<List<TableConstraint<String>>>() {};
+        return JsonCodec.jsonCodec((TypeToken<List<TableConstraint<String>>>) TypeToken.of(typeReference.getType()));
     }
 
     @Override
@@ -556,6 +571,23 @@ public class IcebergHiveMetadata
                 table.getDatabaseName(),
                 table.getTableName(),
                 oldStats -> updatePartitionStatistics(oldStats, tableStatistics));
+    }
+
+    @Override
+    protected ConnectorTableMetadata getTableMetadata(ConnectorSession session, SchemaTableName table, IcebergTableName icebergTableName)
+    {
+        org.apache.iceberg.Table icebergTable = getIcebergTable(session, new SchemaTableName(table.getSchemaName(), icebergTableName.getTableName()));
+        ImmutableList.Builder<ColumnMetadata> columns = ImmutableList.builder();
+        columns.addAll(getColumnMetadatas(icebergTable));
+        List<TableConstraint<String>> constraints = metastore.getTableConstraints(getMetastoreContext(session), table.getSchemaName(), table.getTableName());
+        if (icebergTableName.getTableType() == CHANGELOG) {
+            return ChangelogUtil.getChangelogTableMeta(table, typeManager, columns.build());
+        }
+        else {
+            columns.add(PATH_COLUMN_METADATA);
+            columns.add(DATA_SEQUENCE_NUMBER_COLUMN_METADATA);
+        }
+        return new ConnectorTableMetadata(table, columns.build(), createMetadataProperties(icebergTable), getTableComment(icebergTable), constraints, ImmutableMap.of());
     }
 
     @Override

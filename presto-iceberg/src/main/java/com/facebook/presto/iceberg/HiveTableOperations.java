@@ -27,6 +27,7 @@ import com.facebook.presto.hive.metastore.Table;
 import com.facebook.presto.spi.PrestoException;
 import com.facebook.presto.spi.SchemaTableName;
 import com.facebook.presto.spi.TableNotFoundException;
+import com.facebook.presto.spi.constraints.TableConstraint;
 import com.facebook.presto.spi.security.PrestoPrincipal;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
@@ -52,6 +53,7 @@ import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -67,13 +69,13 @@ import static com.facebook.presto.hive.metastore.HivePrivilegeInfo.HivePrivilege
 import static com.facebook.presto.hive.metastore.MetastoreUtil.TABLE_COMMENT;
 import static com.facebook.presto.hive.metastore.MetastoreUtil.isPrestoView;
 import static com.facebook.presto.iceberg.IcebergErrorCode.ICEBERG_INVALID_METADATA;
+import static com.facebook.presto.iceberg.IcebergHiveMetadata.constraintsCodec;
 import static com.facebook.presto.iceberg.IcebergUtil.isIcebergTable;
 import static com.facebook.presto.iceberg.IcebergUtil.toHiveColumns;
 import static com.facebook.presto.spi.security.PrincipalType.USER;
 import static com.google.common.base.Preconditions.checkState;
 import static java.lang.Integer.parseInt;
 import static java.lang.String.format;
-import static java.util.Collections.emptyList;
 import static java.util.Objects.requireNonNull;
 import static java.util.UUID.randomUUID;
 import static org.apache.iceberg.BaseMetastoreTableOperations.ICEBERG_TABLE_TYPE_VALUE;
@@ -89,6 +91,7 @@ public class HiveTableOperations
 {
     private static final Logger log = Logger.get(HiveTableOperations.class);
 
+    public static final String COLUMN_CONSTRAINTS = "column_constraints";
     public static final String METADATA_LOCATION = "metadata_location";
     public static final String PREVIOUS_METADATA_LOCATION = "previous_metadata_location";
     private static final String METADATA_FOLDER_NAME = "metadata";
@@ -309,8 +312,9 @@ public class HiveTableOperations
                         .put(table.getOwner(), new HivePrivilegeInfo(DELETE, true, owner, owner))
                         .build(),
                     ImmutableMultimap.of());
+            List<TableConstraint<String>> constraints = constraintsCodec().fromJson(metadata.properties().getOrDefault(COLUMN_CONSTRAINTS, "[]"));
             if (base == null) {
-                metastore.createTable(metastoreContext, table, privileges, emptyList());
+                metastore.createTable(metastoreContext, table, privileges, constraints);
             }
             else {
                 PartitionStatistics tableStats = metastore.getTableStatistics(metastoreContext, database, tableName);
