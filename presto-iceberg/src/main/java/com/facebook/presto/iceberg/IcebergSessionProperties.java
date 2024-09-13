@@ -64,6 +64,7 @@ public final class IcebergSessionProperties
     public static final String HIVE_METASTORE_STATISTICS_MERGE_STRATEGY = "hive_statistics_merge_strategy";
     public static final String STATISTIC_SNAPSHOT_RECORD_DIFFERENCE_WEIGHT = "statistic_snapshot_record_difference_weight";
     public static final String ROWS_FOR_METADATA_OPTIMIZATION_THRESHOLD = "rows_for_metadata_optimization_threshold";
+    public static final String TARGET_SPLIT_SIZE = "target_split_size";
 
     private final List<PropertyMetadata<?>> sessionProperties;
 
@@ -184,6 +185,11 @@ public final class IcebergSessionProperties
                                 "of an Iceberg table exceeds this threshold, metadata optimization would be skipped for " +
                                 "the table. A value of 0 means skip metadata optimization directly.",
                         icebergConfig.getRowsForMetadataOptimizationThreshold(),
+                        false))
+                .add(dataSizeSessionProperty(
+                        TARGET_SPLIT_SIZE,
+                        "The target split size. Set to 0 to use the iceberg table's read.split.target-size property",
+                        DataSize.succinctDataSize(256, DataSize.Unit.MEGABYTE),
                         false));
 
         nessieConfig.ifPresent((config) -> propertiesBuilder
@@ -312,5 +318,10 @@ public final class IcebergSessionProperties
     public static String getNessieReferenceHash(ConnectorSession session)
     {
         return session.getProperty(NESSIE_REFERENCE_HASH, String.class);
+    }
+
+    public static DataSize getTargetSplitSize(ConnectorSession session)
+    {
+        return session.getProperty(TARGET_SPLIT_SIZE, DataSize.class);
     }
 }

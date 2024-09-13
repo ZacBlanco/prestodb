@@ -94,7 +94,7 @@ public class IcebergSplitManager
             IncrementalChangelogScan scan = icebergTable.newIncrementalChangelogScan()
                     .fromSnapshotExclusive(fromSnapshot)
                     .toSnapshot(toSnapshot);
-            return new ChangelogSplitSource(session, typeManager, icebergTable, scan, scan.targetSplitSize());
+            return new ChangelogSplitSource(session, typeManager, icebergTable, scan, IcebergUtil.getTargetSplitSize(session, scan).toBytes());
         }
         else if (table.getIcebergTableName().getTableType() == EQUALITY_DELETES) {
             CloseableIterable<DeleteFile> deleteFiles = IcebergUtil.getDeleteFiles(icebergTable,
@@ -116,7 +116,7 @@ public class IcebergSplitManager
             IcebergSplitSource splitSource = new IcebergSplitSource(
                     session,
                     tableScan,
-                    TableScanUtil.splitFiles(tableScan.planFiles(), tableScan.targetSplitSize()),
+                    TableScanUtil.splitFiles(tableScan.planFiles(), IcebergUtil.getTargetSplitSize(session, tableScan).toBytes()),
                     getMinimumAssignedSplitWeight(session),
                     getMetadataColumnConstraints(layoutHandle.getValidPredicate()));
             return splitSource;
