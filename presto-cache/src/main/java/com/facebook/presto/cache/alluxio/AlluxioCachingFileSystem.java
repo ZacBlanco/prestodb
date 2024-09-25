@@ -22,12 +22,16 @@ import com.facebook.presto.hive.HiveFileContext;
 import com.facebook.presto.hive.filesystem.ExtendedFileSystem;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
+import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.Path;
 
 import java.io.IOException;
 import java.net.URI;
+import java.util.Optional;
+import java.util.OptionalLong;
 
 import static alluxio.conf.PropertyKey.USER_CLIENT_CACHE_QUOTA_ENABLED;
+import static com.facebook.presto.hive.CacheQuota.NO_CACHE_CONSTRAINTS;
 import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.hash.Hashing.md5;
 import static java.nio.charset.StandardCharsets.UTF_8;
@@ -72,6 +76,35 @@ public class AlluxioCachingFileSystem
         });
         this.cacheQuotaEnabled = configuration.getBoolean(USER_CLIENT_CACHE_QUOTA_ENABLED.getName(), false);
         localCacheFileSystem.initialize(uri, configuration);
+    }
+
+    @Override
+    public FSDataInputStream open(Path path)
+            throws IOException
+    {
+        FileStatus fileStatus = getFileStatus(path);
+        long fileSize = fileStatus.getLen();
+        long modificationTime = fileStatus.getModificationTime();
+        HiveFileContext hiveFileContext = new HiveFileContext(
+                true,
+                NO_CACHE_CONSTRAINTS,
+                Optional.empty(),
+                OptionalLong.of(fileSize),
+                OptionalLong.empty(),
+                OptionalLong.empty(),
+                modificationTime,
+                false);
+        String cacheIdentifier = md5().hashString(path.toString(), UTF_8).toString();
+        FileInfo info = new FileInfo()
+                .setLastModificationTimeMs(modificationTime)
+                .setPath(path.toString())
+                .setFolder(false)
+                .setLength(fileSize);
+        // CacheContext is the mechanism to pass the cache related context to the source filesystem
+        CacheContext cacheContext = PrestoCacheContext.build(cacheIdentifier, hiveFileContext, cacheQuotaEnabled);
+        URIStatus uriStatus = new URIStatus(info, cacheContext);
+        FSDataInputStream cachingInputStream = localCacheFileSystem.open(uriStatus, BUFFER_SIZE);
+        return cachingInputStream;
     }
 
     @Override
