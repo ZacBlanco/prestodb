@@ -17,8 +17,10 @@ import com.facebook.airlift.configuration.AbstractConfigurationAwareModule;
 import com.facebook.presto.cache.CacheConfig;
 import com.facebook.presto.cache.CacheFactory;
 import com.facebook.presto.cache.CacheStats;
+import com.facebook.presto.cache.CacheType;
 import com.facebook.presto.cache.ForCachingFileSystem;
 import com.facebook.presto.cache.filemerge.FileMergeCacheConfig;
+import com.facebook.presto.hive.CacheQuotaScope;
 import com.facebook.presto.hive.CacheStatsMBean;
 import com.facebook.presto.hive.DynamicConfigurationProvider;
 import com.facebook.presto.hive.FileFormatDataSourceStats;
@@ -85,10 +87,12 @@ import com.google.inject.Provides;
 import com.google.inject.Scopes;
 import com.google.inject.multibindings.Multibinder;
 import io.airlift.slice.Slice;
+import io.airlift.units.DataSize;
 import org.weakref.jmx.MBeanExporter;
 
 import javax.inject.Singleton;
 
+import java.nio.file.Paths;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ExecutorService;
@@ -124,6 +128,16 @@ public class IcebergCommonModule
         binder.bind(CacheStats.class).in(Scopes.SINGLETON);
         configBinder(binder).bindConfig(HiveGcsConfig.class);
         binder.bind(GcsConfigurationInitializer.class).to(HiveGcsConfigurationInitializer.class).in(Scopes.SINGLETON);
+
+        configBinder(binder).bindConfigDefaults(CacheConfig.class, config -> {
+            config.setCacheType(CacheType.ALLUXIO);
+            config.setCachingEnabled(true);
+            config.setBaseDirectory(Paths.get(System.getProperty("java.io.tmpdir")).resolve("presto-coordinator-alluxio-" + connectorId).toAbsolutePath().toUri());
+            config.setDefaultCacheQuota(DataSize.succinctDataSize(256, DataSize.Unit.MEGABYTE));
+            config.setCacheQuotaScope(CacheQuotaScope.GLOBAL);
+            config.setLastModifiedTimeCheckEnabled(false);
+            config.setValidationEnabled(false);
+        });
         binder.bind(HdfsConfiguration.class).annotatedWith(ForMetastoreHdfsEnvironment.class).to(HiveCachingHdfsConfiguration.class).in(Scopes.SINGLETON);
         binder.bind(HdfsConfiguration.class).annotatedWith(ForCachingFileSystem.class).to(HiveHdfsConfiguration.class).in(Scopes.SINGLETON);
 
