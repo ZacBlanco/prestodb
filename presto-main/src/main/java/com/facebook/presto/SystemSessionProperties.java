@@ -374,6 +374,7 @@ public final class SystemSessionProperties
     public static final String OPTIMIZER_USE_HISTOGRAMS = "optimizer_use_histograms";
     public static final String WARN_ON_COMMON_NAN_PATTERNS = "warn_on_common_nan_patterns";
     public static final String INLINE_PROJECTIONS_ON_VALUES = "inline_projections_on_values";
+    public static final String CTE_COST_COMPARISON_THRESHOLD = "cte_cost_comparison_threshold";
 
     private final List<PropertyMetadata<?>> sessionProperties;
 
@@ -2096,6 +2097,10 @@ public final class SystemSessionProperties
                 booleanProperty(INLINE_PROJECTIONS_ON_VALUES,
                         "Whether to evaluate project node on values node",
                         featuresConfig.getInlineProjectionsOnValues(),
+                        false),
+                doubleProperty(CTE_COST_COMPARISON_THRESHOLD,
+                        "Threshold threshold by the cost of a plan with CTEs should exceed the non-CTE plan before being chosen",
+                        1.0,
                         false));
     }
 
@@ -2215,6 +2220,11 @@ public final class SystemSessionProperties
                 .stream()
                 .anyMatch(CTEInformation::isMaterialized);
         return !isStrategyNone && hasMaterializedCTE;
+    }
+
+    public static double getCteCostThreshold(Session session)
+    {
+        return session.getSystemProperty(CTE_COST_COMPARISON_THRESHOLD, Double.class);
     }
 
     public static ExchangeMaterializationStrategy getExchangeMaterializationStrategy(Session session)

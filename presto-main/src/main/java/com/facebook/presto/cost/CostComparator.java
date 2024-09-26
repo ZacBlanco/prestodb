@@ -20,6 +20,7 @@ import com.google.common.collect.Ordering;
 
 import javax.inject.Inject;
 
+import static com.facebook.presto.SystemSessionProperties.getCteCostThreshold;
 import static com.google.common.base.Preconditions.checkArgument;
 import static java.util.Objects.requireNonNull;
 
@@ -52,6 +53,13 @@ public class CostComparator
         return Ordering.from((left, right) -> this.compare(session, left, right));
     }
 
+    protected double getCost(PlanCostEstimate estimate)
+    {
+        return estimate.getCpuCost() * cpuWeight
+                + estimate.getMaxMemory() * memoryWeight
+                + estimate.getNetworkCost() * networkWeight;
+    }
+
     public int compare(Session session, PlanCostEstimate left, PlanCostEstimate right)
     {
         requireNonNull(session, "session is null");
@@ -61,14 +69,36 @@ public class CostComparator
 
         // TODO when one left.getMaxMemory() and right.getMaxMemory() exceeds query memory limit * configurable safety margin, choose the plan with lower memory usage
 
-        double leftCost = left.getCpuCost() * cpuWeight
-                + left.getMaxMemory() * memoryWeight
-                + left.getNetworkCost() * networkWeight;
-
-        double rightCost = right.getCpuCost() * cpuWeight
-                + right.getMaxMemory() * memoryWeight
-                + right.getNetworkCost() * networkWeight;
+        double leftCost = getCost(left);
+        double rightCost = getCost(right);
 
         return Double.compare(leftCost, rightCost);
+    }
+
+    /**
+     * Compares left to right, but multiplies the right cost by some threshold value. This is useful
+     * when comparing an optimized plan, but where we want the optimization to exceed a certain
+     * threshold to be applied
+     * <br>
+     * Essentially it performs the computation {@code compare(left * threshold, right)
+     *
+     * @param session user session
+     * @param left plan cost estimate
+     * @param right plan cost estimate
+     * @param threshold order of magnitude to multiply the right cost by
+     * @return
+     */
+    public int compareWithThreshold(Session session, PlanCostEstimate left, PlanCostEstimate right)
+    {
+        requireNonNull(session, "session is null");
+        requireNonNull(left, "left is null");
+        requireNonNull(right, "right is null");
+        checkArgument(!left.hasUnknownComponents() && !right.hasUnknownComponents(), "cannot compare unknown costs");
+
+        // TODO when one left.getMaxMemory() and right.getMaxMemory() exceeds query memory limit * configurable safety margin, choose the plan with lower memory usage
+
+        double leftCost = getCost(left);
+        double rightCost = getCost(right);
+        return Double.compare(leftCost * getCteCostThreshold(session), rightCost);
     }
 }

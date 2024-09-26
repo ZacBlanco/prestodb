@@ -420,4 +420,13 @@ public class CostCalculatorUsingExchanges
                 a.getMaxMemoryWhenOutputting() + b.getMaxMemoryWhenOutputting(),
                 a.getNetworkCost() + b.getNetworkCost());
     }
+
+    private static PlanCostEstimate addStreamingStreamingSources(PlanCostEstimate a, PlanCostEstimate b)
+    {
+        return new PlanCostEstimate(
+                a.getCpuCost() + b.getCpuCost(),
+                max(a.getMaxMemory(), b.getMaxMemory()),
+                max(a.getMaxMemoryWhenOutputting(), b.getMaxMemoryWhenOutputting()),
+                a.getNetworkCost() + b.getNetworkCost());
+    }
 }

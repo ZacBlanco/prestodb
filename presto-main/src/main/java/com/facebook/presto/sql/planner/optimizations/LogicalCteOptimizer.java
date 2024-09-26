@@ -591,7 +591,7 @@ public class LogicalCteOptimizer
                     int numReferences = cteInfo.getNumberOfReferences();
                     PlanCostEstimate totalCostWithoutMaterialization = multiplyCost(referenceCost, numReferences);
                     PlanCostEstimate totalCostWithMaterialization = addCost(multiplyCost(cteConsumerCost, numReferences - 1), cteProducerCost);
-                    if (costComparator.compare(session, totalCostWithMaterialization, totalCostWithoutMaterialization) < 0) {
+                    if (costComparator.compareWithThreshold(session, totalCostWithMaterialization, totalCostWithoutMaterialization) < 0) {
                         // should be materialized
                         context.candidatesForMaterilization.add(cteId);
                         // update child references
