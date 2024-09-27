@@ -14,6 +14,7 @@
 package com.facebook.presto.plugin.memory;
 
 import com.facebook.presto.spi.connector.Connector;
+import com.facebook.presto.spi.connector.ConnectorCommitHandle;
 import com.facebook.presto.spi.connector.ConnectorMetadata;
 import com.facebook.presto.spi.connector.ConnectorPageSinkProvider;
 import com.facebook.presto.spi.connector.ConnectorPageSourceProvider;
@@ -47,13 +48,19 @@ public class MemoryConnector
     @Override
     public ConnectorTransactionHandle beginTransaction(IsolationLevel isolationLevel, boolean readOnly)
     {
-        return MemoryTransactionHandle.INSTANCE;
+        return new MemoryTransactionHandle();
+    }
+
+    @Override
+    public ConnectorCommitHandle commit(ConnectorTransactionHandle transactionHandle)
+    {
+        return new TransactionalMemoryMetadata(metadata, (MemoryTransactionHandle) transactionHandle).commit();
     }
 
     @Override
     public ConnectorMetadata getMetadata(ConnectorTransactionHandle transactionHandle)
     {
-        return metadata;
+        return new TransactionalMemoryMetadata(metadata, (MemoryTransactionHandle) transactionHandle);
     }
 
     @Override
