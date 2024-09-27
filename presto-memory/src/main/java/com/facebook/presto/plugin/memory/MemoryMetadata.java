@@ -35,8 +35,10 @@ import com.facebook.presto.spi.SchemaNotFoundException;
 import com.facebook.presto.spi.SchemaTableName;
 import com.facebook.presto.spi.SchemaTablePrefix;
 import com.facebook.presto.spi.ViewNotFoundException;
+import com.facebook.presto.spi.connector.ConnectorCommitHandle;
 import com.facebook.presto.spi.connector.ConnectorMetadata;
 import com.facebook.presto.spi.connector.ConnectorOutputMetadata;
+import com.facebook.presto.spi.connector.ConnectorPartitioningMetadata;
 import com.facebook.presto.spi.statistics.ComputedStatistics;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
@@ -65,6 +67,7 @@ import static com.google.common.collect.ImmutableList.toImmutableList;
 import static com.google.common.collect.ImmutableMap.toImmutableMap;
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
+import static java.util.UUID.randomUUID;
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
 
@@ -72,6 +75,8 @@ import static java.util.stream.Collectors.toMap;
 public class MemoryMetadata
         implements ConnectorMetadata
 {
+    public static final String TEMPORARY_TABLE_PREFIX = "__tmp__";
+    public static final String TEMPORARY_TABLES_SCHEMA_NAME = "__tmp__";
     public static final String SCHEMA_NAME = "default";
 
     private final NodeManager nodeManager;
@@ -82,6 +87,19 @@ public class MemoryMetadata
     private final Map<Long, MemoryTableHandle> tables = new HashMap<>();
     private final Map<Long, Map<HostAddress, MemoryDataFragment>> tableDataFragments = new HashMap<>();
     private final Map<SchemaTableName, String> views = new HashMap<>();
+    private final Map<MemoryTransactionHandle, List<SessionAndTable>> temporaryTables = new HashMap<>();
+
+    private static class SessionAndTable
+    {
+        private final ConnectorSession session;
+        private final ConnectorTableHandle tableHandle;
+
+        private SessionAndTable(ConnectorSession session, ConnectorTableHandle tableHandle)
+        {
+            this.session = session;
+            this.tableHandle = tableHandle;
+        }
+    }
 
     @Inject
     public MemoryMetadata(NodeManager nodeManager, MemoryConnectorId connectorId)
@@ -89,6 +107,7 @@ public class MemoryMetadata
         this.nodeManager = requireNonNull(nodeManager, "nodeManager is null");
         this.connectorId = requireNonNull(connectorId, "connectorId is null").toString();
         this.schemas.add(SCHEMA_NAME);
+        this.schemas.add(TEMPORARY_TABLES_SCHEMA_NAME);
     }
 
     @Override
@@ -206,6 +225,32 @@ public class MemoryMetadata
     {
         ConnectorOutputTableHandle outputTableHandle = beginCreateTable(session, tableMetadata, Optional.empty());
         finishCreateTable(session, outputTableHandle, ImmutableList.of(), ImmutableList.of());
+    }
+
+    public synchronized ConnectorTableHandle createTemporaryTable(MemoryTransactionHandle transactionHandle, ConnectorSession session, List<ColumnMetadata> columns, Optional<ConnectorPartitioningMetadata> partitioningMetadata)
+    {
+        String tableName = TEMPORARY_TABLE_PREFIX + "_" +
+                session.getQueryId().replaceAll("-", "_") + "_" +
+                randomUUID().toString().replaceAll("-", "_");
+        SchemaTableName schemaTableName = new SchemaTableName("__tmp__", tableName);
+        createTable(session, new ConnectorTableMetadata(schemaTableName, columns), false);
+        ConnectorTableHandle handle = getTableHandle(session, schemaTableName);
+        temporaryTables.compute(transactionHandle, (key, value) -> {
+            if (value == null) {
+                value = new ArrayList<>();
+            }
+            value.add(new SessionAndTable(session, handle));
+            return value;
+        });
+        return handle;
+    }
+
+    public synchronized ConnectorCommitHandle commit(MemoryTransactionHandle transactionHandle)
+    {
+        List<SessionAndTable> tables = temporaryTables.remove(transactionHandle);
+        Optional.ofNullable(tables)
+                .ifPresent(tablesToDelete -> tablesToDelete.forEach(table -> dropTable(table.session, table.tableHandle)));
+        return new ConnectorCommitHandle() {};
     }
 
     @Override

@@ -127,7 +127,7 @@ public class TestMemoryPagesStore
     private void insertToTable(long tableId, Page page, Long... activeTableIds)
     {
         ConnectorPageSink pageSink = pageSinkProvider.createPageSink(
-                MemoryTransactionHandle.INSTANCE,
+                new MemoryTransactionHandle(),
                 SESSION,
                 createMemoryInsertTableHandle(tableId, activeTableIds),
                 PageSinkContext.defaultContext());
@@ -138,7 +138,7 @@ public class TestMemoryPagesStore
     private void createTable(long tableId, Long... activeTableIds)
     {
         ConnectorPageSink pageSink = pageSinkProvider.createPageSink(
-                MemoryTransactionHandle.INSTANCE,
+                new MemoryTransactionHandle(),
                 SESSION,
                 createMemoryOutputTableHandle(tableId, activeTableIds),
                 PageSinkContext.defaultContext());

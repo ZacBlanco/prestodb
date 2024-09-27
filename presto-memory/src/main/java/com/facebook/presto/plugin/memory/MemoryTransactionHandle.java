@@ -14,9 +14,52 @@
 package com.facebook.presto.plugin.memory;
 
 import com.facebook.presto.spi.connector.ConnectorTransactionHandle;
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
-public enum MemoryTransactionHandle
+import java.util.Objects;
+import java.util.UUID;
+
+import static java.util.UUID.randomUUID;
+
+public class MemoryTransactionHandle
         implements ConnectorTransactionHandle
 {
-    INSTANCE
+    @JsonProperty
+    public UUID getId()
+    {
+        return id;
+    }
+
+    private final UUID id;
+
+    public MemoryTransactionHandle()
+    {
+        id = randomUUID();
+    }
+
+    @JsonCreator
+    public MemoryTransactionHandle(@JsonProperty("id") UUID id)
+    {
+        this.id = id;
+    }
+
+    @Override
+    public int hashCode()
+    {
+        return id.hashCode();
+    }
+
+    @Override
+    public boolean equals(Object obj)
+    {
+        if (this == obj) {
+            return true;
+        }
+        if (obj == null || getClass() != obj.getClass()) {
+            return false;
+        }
+        MemoryTransactionHandle other = (MemoryTransactionHandle) obj;
+        return Objects.equals(id, other.id);
+    }
 }
