@@ -18,7 +18,6 @@ import com.facebook.presto.spi.ColumnHandle;
 import com.facebook.presto.spi.ConnectorPageSource;
 import com.facebook.presto.spi.ConnectorSession;
 import com.facebook.presto.spi.ConnectorSplit;
-import com.facebook.presto.spi.FixedPageSource;
 import com.facebook.presto.spi.SplitContext;
 import com.facebook.presto.spi.connector.ConnectorPageSourceProvider;
 import com.facebook.presto.spi.connector.ConnectorTransactionHandle;
@@ -26,12 +25,13 @@ import com.facebook.presto.spi.connector.ConnectorTransactionHandle;
 import javax.inject.Inject;
 
 import java.util.List;
+import java.util.stream.Stream;
 
 import static java.util.Objects.requireNonNull;
 import static java.util.stream.Collectors.toList;
 
 public final class MemoryPageSourceProvider
-        implements ConnectorPageSourceProvider
+        implements ConnectorPageSourceProvider, AutoCloseable
 {
     private final MemoryPagesStore pagesStore;
 
@@ -58,13 +58,20 @@ public final class MemoryPageSourceProvider
         List<Integer> columnIndexes = columns.stream()
                 .map(MemoryColumnHandle.class::cast)
                 .map(MemoryColumnHandle::getColumnIndex).collect(toList());
-        List<Page> pages = pagesStore.getPages(
+        Stream<Page> pages = pagesStore.getPages(
                 tableId,
                 partNumber,
                 totalParts,
                 columnIndexes,
                 expectedRows);
 
-        return new FixedPageSource(pages);
+        return new MemoryIteratorPageSource(pages.iterator());
+    }
+
+    @Override
+    public void close()
+            throws Exception
+    {
+        pagesStore.close();
     }
 }

@@ -99,7 +99,6 @@
         <dependency>
             <groupId>com.facebook.airlift</groupId>
             <artifactId>log</artifactId>
-            <scope>runtime</scope>
         </dependency>
 
         <dependency>
