@@ -20,9 +20,12 @@ import com.facebook.presto.spi.connector.ConnectorPageSinkProvider;
 import com.facebook.presto.spi.connector.ConnectorPageSourceProvider;
 import com.facebook.presto.spi.connector.ConnectorSplitManager;
 import com.facebook.presto.spi.connector.ConnectorTransactionHandle;
+import com.facebook.presto.spi.session.PropertyMetadata;
 import com.facebook.presto.spi.transaction.IsolationLevel;
 
 import javax.inject.Inject;
+
+import java.util.List;
 
 public class MemoryConnector
         implements Connector
@@ -31,18 +34,21 @@ public class MemoryConnector
     private final MemorySplitManager splitManager;
     private final MemoryPageSourceProvider pageSourceProvider;
     private final MemoryPageSinkProvider pageSinkProvider;
+    private final MemorySessionProperties memorySessionProperties;
 
     @Inject
     public MemoryConnector(
             MemoryMetadata metadata,
             MemorySplitManager splitManager,
             MemoryPageSourceProvider pageSourceProvider,
-            MemoryPageSinkProvider pageSinkProvider)
+            MemoryPageSinkProvider pageSinkProvider,
+            MemorySessionProperties memorySessionProperties)
     {
         this.metadata = metadata;
         this.splitManager = splitManager;
         this.pageSourceProvider = pageSourceProvider;
         this.pageSinkProvider = pageSinkProvider;
+        this.memorySessionProperties = memorySessionProperties;
     }
 
     @Override
@@ -76,8 +82,25 @@ public class MemoryConnector
     }
 
     @Override
+    public void shutdown()
+    {
+        try {
+            pageSourceProvider.close();
+        }
+        catch (Exception e) {
+            throw new RuntimeException("Failed to clean up memory page source", e);
+        }
+    }
+
+    @Override
     public ConnectorPageSinkProvider getPageSinkProvider()
     {
         return pageSinkProvider;
+    }
+
+    @Override
+    public List<PropertyMetadata<?>> getSessionProperties()
+    {
+        return memorySessionProperties.getSessionProperties();
     }
 }

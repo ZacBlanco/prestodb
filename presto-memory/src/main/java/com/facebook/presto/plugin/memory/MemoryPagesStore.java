@@ -13,34 +13,49 @@
  */
 package com.facebook.presto.plugin.memory;
 
+import com.facebook.airlift.log.Logger;
 import com.facebook.presto.common.Page;
 import com.facebook.presto.common.block.Block;
+import com.facebook.presto.plugin.memory.tuplestore.SpillingTupleStore;
+import com.facebook.presto.plugin.memory.tuplestore.TupleStore;
 import com.facebook.presto.spi.PrestoException;
-import com.google.common.collect.ImmutableList;
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.Iterators;
+import com.google.common.collect.Streams;
+import io.airlift.units.DataSize;
 
-import javax.annotation.concurrent.GuardedBy;
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 import javax.inject.Inject;
 
-import java.util.ArrayList;
+import java.nio.file.Path;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Supplier;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
-import static com.facebook.presto.plugin.memory.MemoryErrorCode.MEMORY_LIMIT_EXCEEDED;
 import static com.facebook.presto.plugin.memory.MemoryErrorCode.MISSING_DATA;
 import static java.lang.String.format;
 
 @ThreadSafe
 public class MemoryPagesStore
+        implements AutoCloseable
 {
+    private static final Logger log = Logger.get(MemoryPagesStore.class);
     private final long maxBytes;
+    private final DataSize maxSpillSize;
+    private final DataSize maxTableMemorySize;
+    @Nullable
+    private final Path spillDirectory;
 
-    @GuardedBy("this")
-    private long currentBytes;
+    private Supplier<Long> currentBytes;
 
     private final Map<Long, TableData> tables = new HashMap<>();
 
@@ -48,12 +63,22 @@ public class MemoryPagesStore
     public MemoryPagesStore(MemoryConfig config)
     {
         this.maxBytes = config.getMaxDataPerNode().toBytes();
+        this.maxSpillSize = config.getMaxSpillFileSize();
+        this.maxTableMemorySize = config.getMaxMemoryPerTable();
+        this.spillDirectory = config.getSpillDirectory();
+        currentBytes = () -> tables.values().stream().mapToLong(TableData::getStoredBytes).sum();
+    }
+
+    @VisibleForTesting
+    public long getCurrentSize()
+    {
+        return currentBytes.get();
     }
 
     public synchronized void initialize(long tableId)
     {
         if (!tables.containsKey(tableId)) {
-            tables.put(tableId, new TableData());
+            tables.put(tableId, new TableData(spillDirectory, maxTableMemorySize, maxSpillSize));
         }
     }
 
@@ -62,20 +87,16 @@ public class MemoryPagesStore
         if (!contains(tableId)) {
             throw new PrestoException(MISSING_DATA, "Failed to find table on a worker.");
         }
-
         page.compact();
-
-        long newSize = currentBytes + page.getRetainedSizeInBytes();
-        if (maxBytes < newSize) {
-            throw new PrestoException(MEMORY_LIMIT_EXCEEDED, format("Memory limit [%d] for memory connector exceeded", maxBytes));
-        }
-        currentBytes = newSize;
 
         TableData tableData = tables.get(tableId);
         tableData.add(page);
+        if (currentBytes.get() > maxBytes) {
+            CompletableFuture.allOf(tables.values().stream().map(TableData::spill).toArray(CompletableFuture<?>[]::new)).join();
+        }
     }
 
-    public synchronized List<Page> getPages(
+    public synchronized Stream<Page> getPages(
             Long tableId,
             int partNumber,
             int totalParts,
@@ -90,14 +111,19 @@ public class MemoryPagesStore
             throw new PrestoException(MISSING_DATA,
                     format("Expected to find [%s] rows on a worker, but found [%s].", expectedRows, tableData.getRows()));
         }
+        // skip every N elements starting from partNumber
 
-        ImmutableList.Builder<Page> partitionedPages = ImmutableList.builder();
-
-        for (int i = partNumber; i < tableData.getPages().size(); i += totalParts) {
-            partitionedPages.add(getColumns(tableData.getPages().get(i), columnIndexes));
-        }
-
-        return partitionedPages.build();
+        return Streams.zip(
+                IntStream.iterate(0, i -> i + 1).skip(partNumber).boxed(),
+                Streams.stream(tableData.getPages()).skip(partNumber),
+                (indx, page) -> {
+                    if (((indx - partNumber) % totalParts == 0)) {
+                        return page;
+                    }
+                    return null;
+                })
+                .filter(Objects::nonNull)
+                .map(page -> getColumns(page, columnIndexes));
     }
 
     public synchronized boolean contains(Long tableId)
@@ -125,8 +151,11 @@ public class MemoryPagesStore
             Map.Entry<Long, TableData> tablePagesEntry = tableDataIterator.next();
             Long tableId = tablePagesEntry.getKey();
             if (tableId < latestTableId && !activeTableIds.contains(tableId)) {
-                for (Page removedPage : tablePagesEntry.getValue().getPages()) {
-                    currentBytes -= removedPage.getRetainedSizeInBytes();
+                try {
+                    tablePagesEntry.getValue().close();
+                }
+                catch (Exception e) {
+                    log.warn(e, "Failed to close tuple store: %s", e.toString());
                 }
                 tableDataIterator.remove();
             }
@@ -144,25 +173,61 @@ public class MemoryPagesStore
         return new Page(page.getPositionCount(), outputBlocks);
     }
 
-    private static final class TableData
+    @Override
+    public void close()
+            throws Exception
     {
-        private final List<Page> pages = new ArrayList<>();
+        for (TableData tableData : tables.values()) {
+            tableData.close();
+        }
+    }
+
+    private static final class TableData
+            implements AutoCloseable
+    {
+        private final TupleStore pages;
         private long rows;
+
+        public TableData(Path spillPath, DataSize maxTableMemory, DataSize maxSpillFileSize)
+        {
+            this.pages = new SpillingTupleStore(
+                    Runtime.getRuntime().availableProcessors(),
+                    spillPath,
+                    maxTableMemory,
+                    maxSpillFileSize);
+        }
 
         public void add(Page page)
         {
-            pages.add(page);
+            pages.addPages(Iterators.singletonIterator(page)).join();
             rows += page.getPositionCount();
         }
 
-        private List<Page> getPages()
+        public CompletableFuture<?> spill()
         {
-            return pages;
+            return pages.flush();
+        }
+
+        private Iterator<Page> getPages()
+        {
+            return pages.readPages();
         }
 
         private long getRows()
         {
             return rows;
+        }
+
+        private long getStoredBytes()
+        {
+            return pages.getMemoryUtilization();
+        }
+
+        @Override
+        public void close()
+                throws Exception
+        {
+            pages.close();
         }
     }
 }

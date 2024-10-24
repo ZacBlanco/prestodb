@@ -43,6 +43,7 @@ public class MemoryModule
         binder.bind(NodeManager.class).toInstance(nodeManager);
 
         binder.bind(MemoryConnector.class).in(Scopes.SINGLETON);
+        binder.bind(MemorySessionProperties.class).in(Scopes.SINGLETON);
         binder.bind(MemoryConnectorId.class).toInstance(new MemoryConnectorId(connectorId));
         binder.bind(MemoryMetadata.class).in(Scopes.SINGLETON);
         binder.bind(MemorySplitManager.class).in(Scopes.SINGLETON);

@@ -26,8 +26,11 @@ import com.facebook.presto.testing.TestingConnectorSession;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import io.airlift.units.DataSize;
+import org.testng.annotations.AfterMethod;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
+
+import java.util.stream.Collectors;
 
 import static com.facebook.presto.common.type.BigintType.BIGINT;
 import static java.lang.String.format;
@@ -43,19 +46,28 @@ public class TestMemoryPagesStore
 
     private MemoryPagesStore pagesStore;
     private MemoryPageSinkProvider pageSinkProvider;
+    private MemoryConfig memoryConfig = new MemoryConfig()
+            .setMaxDataPerNode(new DataSize(1, DataSize.Unit.MEGABYTE));
 
     @BeforeMethod
     public void setUp()
     {
-        pagesStore = new MemoryPagesStore(new MemoryConfig().setMaxDataPerNode(new DataSize(1, DataSize.Unit.MEGABYTE)));
+        pagesStore = new MemoryPagesStore(memoryConfig);
         pageSinkProvider = new MemoryPageSinkProvider(pagesStore, HostAddress.fromString("localhost:8080"));
+    }
+
+    @AfterMethod
+    public void tearDown()
+            throws Exception
+    {
+        pagesStore.close();
     }
 
     @Test
     public void testCreateEmptyTable()
     {
         createTable(0L, 0L);
-        assertEquals(pagesStore.getPages(0L, 0, 1, ImmutableList.of(0), 0), ImmutableList.of());
+        assertEquals(pagesStore.getPages(0L, 0, 1, ImmutableList.of(0), 0).collect(Collectors.toList()), ImmutableList.of());
     }
 
     @Test
@@ -63,14 +75,14 @@ public class TestMemoryPagesStore
     {
         createTable(0L, 0L);
         insertToTable(0L, 0L);
-        assertEquals(pagesStore.getPages(0L, 0, 1, ImmutableList.of(0), POSITIONS_PER_PAGE).size(), 1);
+        assertEquals(pagesStore.getPages(0L, 0, 1, ImmutableList.of(0), POSITIONS_PER_PAGE).count(), 1);
     }
 
     @Test
     public void testInsertPageWithoutCreate()
     {
         insertToTable(0L, 0L);
-        assertEquals(pagesStore.getPages(0L, 0, 1, ImmutableList.of(0), POSITIONS_PER_PAGE).size(), 1);
+        assertEquals(pagesStore.getPages(0L, 0, 1, ImmutableList.of(0), POSITIONS_PER_PAGE).count(), 1);
     }
 
     @Test(expectedExceptions = PrestoException.class)
@@ -83,7 +95,7 @@ public class TestMemoryPagesStore
     public void testTryToReadFromEmptyTable()
     {
         createTable(0L, 0L);
-        assertEquals(pagesStore.getPages(0L, 0, 1, ImmutableList.of(0), 0), ImmutableList.of());
+        assertEquals(pagesStore.getPages(0L, 0, 1, ImmutableList.of(0), 0).collect(Collectors.toList()), ImmutableList.of());
         pagesStore.getPages(0L, 0, 1, ImmutableList.of(0), 42);
     }
 
@@ -111,12 +123,16 @@ public class TestMemoryPagesStore
         assertTrue(pagesStore.contains(2L));
     }
 
-    @Test(expectedExceptions = PrestoException.class)
+    @Test
     public void testMemoryLimitExceeded()
     {
         createTable(0L, 0L);
         insertToTable(0L, createOneMegaBytePage(), 0L);
+        assertTrue(pagesStore.getCurrentSize() < memoryConfig.getMaxDataPerNode().toBytes());
         insertToTable(0L, createOneMegaBytePage(), 0L);
+        assertTrue(pagesStore.getCurrentSize() < memoryConfig.getMaxDataPerNode().toBytes());
+        insertToTable(0L, createOneMegaBytePage(), 0L);
+        assertTrue(pagesStore.getCurrentSize() < memoryConfig.getMaxDataPerNode().toBytes());
     }
 
     private void insertToTable(long tableId, Long... activeTableIds)

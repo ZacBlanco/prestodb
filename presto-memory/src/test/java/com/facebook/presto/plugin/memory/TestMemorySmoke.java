@@ -129,7 +129,7 @@ public class TestMemorySmoke
         assertUpdate("CREATE SCHEMA schema1");
         assertUpdate("CREATE SCHEMA schema2");
 
-        assertQueryResult("SHOW SCHEMAS", "default", "information_schema", "schema1", "schema2");
+        assertQueryResult("SHOW SCHEMAS", "__tmp__", "default", "information_schema", "schema1", "schema2");
         assertUpdate("CREATE TABLE schema1.nation AS SELECT * FROM tpch.tiny.nation WHERE nationkey % 2 = 0", "SELECT count(*) FROM nation WHERE MOD(nationkey, 2) = 0");
         assertUpdate("CREATE TABLE schema2.nation AS SELECT * FROM tpch.tiny.nation WHERE nationkey % 2 = 1", "SELECT count(*) FROM nation WHERE MOD(nationkey, 2) = 1");
 

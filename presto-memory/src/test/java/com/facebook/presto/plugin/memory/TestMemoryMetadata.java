@@ -163,9 +163,9 @@ public class TestMemoryMetadata
     @Test
     public void testCreateSchema()
     {
-        assertEquals(metadata.listSchemaNames(SESSION), ImmutableList.of("default"));
+        assertEquals(metadata.listSchemaNames(SESSION), ImmutableList.of("default", "__tmp__"));
         metadata.createSchema(SESSION, "test", ImmutableMap.of());
-        assertEquals(metadata.listSchemaNames(SESSION), ImmutableList.of("default", "test"));
+        assertEquals(metadata.listSchemaNames(SESSION), ImmutableList.of("default", "__tmp__", "test"));
         assertEquals(metadata.listTables(SESSION, "test"), ImmutableList.of());
 
         SchemaTableName tableName = new SchemaTableName("test", "first_table");
@@ -279,7 +279,7 @@ public class TestMemoryMetadata
     @Test
     public void testCreateTableAndViewInNotExistSchema()
     {
-        assertEquals(metadata.listSchemaNames(SESSION), ImmutableList.of("default"));
+        assertEquals(metadata.listSchemaNames(SESSION), ImmutableList.of("default", "__tmp__"));
 
         SchemaTableName table1 = new SchemaTableName("test1", "test_schema_table1");
         try {
@@ -321,7 +321,7 @@ public class TestMemoryMetadata
         }
         assertNull(metadata.getTableHandle(SESSION, view3));
 
-        assertEquals(metadata.listSchemaNames(SESSION), ImmutableList.of("default"));
+        assertEquals(metadata.listSchemaNames(SESSION), ImmutableList.of("default", "__tmp__"));
     }
 
     @Test

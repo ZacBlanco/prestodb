@@ -26,16 +26,14 @@ import javax.inject.Inject;
 
 import java.util.List;
 
+import static com.facebook.presto.plugin.memory.MemorySessionProperties.getSplitsPerNode;
+
 public final class MemorySplitManager
         implements ConnectorSplitManager
 {
-    private final int splitsPerNode;
-
     @Inject
-    public MemorySplitManager(MemoryConfig config)
-    {
-        this.splitsPerNode = config.getSplitsPerNode();
-    }
+    public MemorySplitManager()
+    {}
 
     @Override
     public ConnectorSplitSource getSplits(
@@ -47,6 +45,7 @@ public final class MemorySplitManager
         MemoryTableLayoutHandle layout = (MemoryTableLayoutHandle) layoutHandle;
 
         List<MemoryDataFragment> dataFragments = layout.getDataFragments();
+        int splitsPerNode = getSplitsPerNode(session);
 
         ImmutableList.Builder<ConnectorSplit> splits = ImmutableList.builder();
         for (MemoryDataFragment dataFragment : dataFragments) {
