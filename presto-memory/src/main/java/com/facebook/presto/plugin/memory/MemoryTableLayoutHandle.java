@@ -17,7 +17,7 @@ import com.facebook.presto.spi.ConnectorTableLayoutHandle;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
-import java.util.List;
+import java.util.Collection;
 
 import static java.util.Objects.requireNonNull;
 
@@ -25,12 +25,12 @@ public class MemoryTableLayoutHandle
         implements ConnectorTableLayoutHandle
 {
     private final MemoryTableHandle table;
-    private final List<MemoryDataFragment> dataFragments;
+    private final Collection<MemoryDataFragment> dataFragments;
 
     @JsonCreator
     public MemoryTableLayoutHandle(
             @JsonProperty("table") MemoryTableHandle table,
-            @JsonProperty("dataFragments") List<MemoryDataFragment> dataFragments)
+            @JsonProperty("dataFragments") Collection<MemoryDataFragment> dataFragments)
     {
         this.table = requireNonNull(table, "table is null");
         this.dataFragments = requireNonNull(dataFragments, "dataFragments is null");
@@ -43,7 +43,7 @@ public class MemoryTableLayoutHandle
     }
 
     @JsonProperty
-    public List<MemoryDataFragment> getDataFragments()
+    public Collection<MemoryDataFragment> getDataFragments()
     {
         return dataFragments;
     }

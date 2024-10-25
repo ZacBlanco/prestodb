@@ -13,6 +13,7 @@
  */
 package com.facebook.presto.plugin.memory;
 
+import com.facebook.presto.Session;
 import com.facebook.presto.common.QualifiedObjectName;
 import com.facebook.presto.testing.MaterializedResult;
 import com.facebook.presto.testing.MaterializedRow;
@@ -23,6 +24,8 @@ import org.testng.annotations.Test;
 
 import java.util.List;
 
+import static com.facebook.presto.SystemSessionProperties.CTE_MATERIALIZATION_STRATEGY;
+import static com.facebook.presto.SystemSessionProperties.CTE_PARTITIONING_PROVIDER_CATALOG;
 import static com.facebook.presto.testing.assertions.Assert.assertEquals;
 import static java.lang.String.format;
 import static org.testng.Assert.assertTrue;
@@ -164,6 +167,26 @@ public class TestMemorySmoke
 
         assertUpdate("DROP TABLE test_different_schema.test_table_renamed");
         assertUpdate("DROP SCHEMA test_different_schema");
+    }
+
+    /**
+     * Verifies that we get the correct number of rows from a query which executes with CTE
+     * materialization
+     */
+    @Test
+    public void testCteResult()
+    {
+        try {
+            Session cteSession = Session.builder(getSession())
+                    .setSystemProperty(CTE_MATERIALIZATION_STRATEGY, "ALL")
+                    .setSystemProperty(CTE_PARTITIONING_PROVIDER_CATALOG, getSession().getCatalog().get())
+                    .build();
+            assertUpdate("CREATE TABLE cte_count as SELECT * FROM (VALUES 1, 2, 3, 4, 5) t(a)", 5);
+            assertQuery(cteSession, "WITH x as (SELECT * FROM cte_count) SELECT min(a) FROM x", "VALUES 1");
+        }
+        finally {
+            dropTableIfExists(getQueryRunner(), getSession().getCatalog().get(), getSession().getSchema().get(), "cte_count");
+        }
     }
 
     @Test

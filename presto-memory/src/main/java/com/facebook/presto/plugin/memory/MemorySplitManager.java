@@ -24,7 +24,7 @@ import com.google.common.collect.ImmutableList;
 
 import javax.inject.Inject;
 
-import java.util.List;
+import java.util.Collection;
 
 import static com.facebook.presto.plugin.memory.MemorySessionProperties.getSplitsPerNode;
 
@@ -44,21 +44,27 @@ public final class MemorySplitManager
     {
         MemoryTableLayoutHandle layout = (MemoryTableLayoutHandle) layoutHandle;
 
-        List<MemoryDataFragment> dataFragments = layout.getDataFragments();
-        int splitsPerNode = getSplitsPerNode(session);
+        // this needs to be computed lazily because when dealing with temporary tables,
+        // fragment information is updated after `getSplits` is called. So we need to
+        // delay computation until scheduling time when `getNextBatch` is called
+        // on the split source.
+        return new MemoryLazySplitSource(() -> {
+            Collection<MemoryDataFragment> dataFragments = layout.getDataFragments();
+            int splitsPerNode = getSplitsPerNode(session);
 
-        ImmutableList.Builder<ConnectorSplit> splits = ImmutableList.builder();
-        for (MemoryDataFragment dataFragment : dataFragments) {
-            for (int i = 0; i < splitsPerNode; i++) {
-                splits.add(
-                        new MemorySplit(
-                                layout.getTable(),
-                                i,
-                                splitsPerNode,
-                                dataFragment.getHostAddress(),
-                                dataFragment.getRows()));
+            ImmutableList.Builder<ConnectorSplit> splits = ImmutableList.builder();
+            for (MemoryDataFragment dataFragment : dataFragments) {
+                for (int i = 0; i < splitsPerNode; i++) {
+                    splits.add(
+                            new MemorySplit(
+                                    layout.getTable(),
+                                    i,
+                                    splitsPerNode,
+                                    dataFragment.getHostAddress(),
+                                    dataFragment.getRows()));
+                }
             }
-        }
-        return new FixedSplitSource(splits.build());
+            return new FixedSplitSource(splits.build());
+        });
     }
 }

@@ -49,6 +49,7 @@ import javax.inject.Inject;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -393,8 +394,11 @@ public class MemoryMetadata
                 memoryTableHandle.getSchemaName(),
                 memoryTableHandle.getTableName());
 
-        List<MemoryDataFragment> expectedFragments = ImmutableList.copyOf(
+        Collection<MemoryDataFragment> expectedFragments = Collections.unmodifiableCollection(
                 tableDataFragments.get(memoryTableHandle.getTableId()).values());
+
+        // temporary tables don't have their fragments updated until the writes are finished, so we should return an empty list here
+        // for any temporary tables
 
         MemoryTableLayoutHandle layoutHandle = new MemoryTableLayoutHandle(memoryTableHandle, expectedFragments);
         return ImmutableList.of(new ConnectorTableLayoutResult(getTableLayout(session, layoutHandle), constraint.getSummary()));
