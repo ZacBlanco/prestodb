@@ -105,7 +105,7 @@ import com.facebook.presto.server.ServerConfig;
 import com.facebook.presto.server.SessionPropertyDefaults;
 import com.facebook.presto.server.TaskUpdateRequest;
 import com.facebook.presto.server.remotetask.RemoteTaskStats;
-import com.facebook.presto.server.security.ServerSecurityModule;
+import com.facebook.presto.server.security.PasswordAuthenticatorManager;
 import com.facebook.presto.spark.accesscontrol.PrestoSparkAccessControlChecker;
 import com.facebook.presto.spark.accesscontrol.PrestoSparkAuthenticatorProvider;
 import com.facebook.presto.spark.accesscontrol.PrestoSparkCredentialsProvider;
@@ -528,8 +528,7 @@ public class PrestoSparkModule
         // TODO: Decouple and remove: required by LocalExecutionPlanner, PlanFragmenter
         binder.bind(NodePartitioningManager.class).to(PrestoSparkNodePartitioningManager.class).in(Scopes.SINGLETON);
 
-        // TODO: Decouple and remove: required by PluginManager
-        install(new ServerSecurityModule());
+        binder.bind(PasswordAuthenticatorManager.class).in(Scopes.SINGLETON);
 
         binder.bind(RemoteTaskStats.class).in(Scopes.SINGLETON);
         newExporter(binder).export(RemoteTaskStats.class).withGeneratedName();
