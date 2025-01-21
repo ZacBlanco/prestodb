@@ -117,7 +117,7 @@
 
         <dependency>
             <groupId>com.facebook.presto</groupId>
-            <artifactId>presto-main</artifactId>
+            <artifactId>presto-main-base</artifactId>
             <scope>test</scope>
             <exclusions>
                 <exclusion>
@@ -129,7 +129,7 @@
 
         <dependency>
             <groupId>com.facebook.presto</groupId>
-            <artifactId>presto-main-base</artifactId>
+            <artifactId>presto-main</artifactId>
             <scope>test</scope>
             <exclusions>
                 <exclusion>
