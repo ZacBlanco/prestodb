@@ -49,6 +49,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
+import io.airlift.units.DataSize;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.ContentFile;
 import org.apache.iceberg.ContentScanTask;
@@ -61,6 +62,7 @@ import org.apache.iceberg.MetadataTableType;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.RowLevelOperationMode;
+import org.apache.iceberg.Scan;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.SortOrder;
@@ -195,6 +197,8 @@ import static org.apache.iceberg.TableProperties.METRICS_MAX_INFERRED_COLUMN_DEF
 import static org.apache.iceberg.TableProperties.METRICS_MAX_INFERRED_COLUMN_DEFAULTS_DEFAULT;
 import static org.apache.iceberg.TableProperties.ORC_COMPRESSION;
 import static org.apache.iceberg.TableProperties.PARQUET_COMPRESSION;
+import static org.apache.iceberg.TableProperties.SPLIT_SIZE;
+import static org.apache.iceberg.TableProperties.SPLIT_SIZE_DEFAULT;
 import static org.apache.iceberg.TableProperties.UPDATE_MODE;
 import static org.apache.iceberg.TableProperties.WRITE_LOCATION_PROVIDER_IMPL;
 import static org.apache.iceberg.types.Type.TypeID.BINARY;
@@ -1153,6 +1157,9 @@ public final class IcebergUtil
 
         Integer metricsMaxInferredColumn = IcebergTableProperties.getMetricsMaxInferredColumn(tableMetadata.getProperties());
         propertiesBuilder.put(METRICS_MAX_INFERRED_COLUMN_DEFAULTS, String.valueOf(metricsMaxInferredColumn));
+
+        propertiesBuilder.put(SPLIT_SIZE, String.valueOf(IcebergTableProperties.getTargetSplitSize(tableMetadata.getProperties())));
+
         return propertiesBuilder.build();
     }
 
@@ -1255,5 +1262,24 @@ public final class IcebergUtil
             }
         }
         return dataLocation;
+    }
+
+    public static Long getSplitSize(Table table)
+    {
+        return Long.parseLong(table.properties()
+                .getOrDefault(SPLIT_SIZE,
+                        String.valueOf(SPLIT_SIZE_DEFAULT)));
+    }
+
+    public static DataSize getTargetSplitSize(long sessionValueProperty, long icebergScanTargetSplitSize)
+    {
+        return Optional.of(DataSize.succinctBytes(sessionValueProperty))
+                .filter(size -> !size.equals(DataSize.succinctBytes(0)))
+                .orElse(DataSize.succinctBytes(icebergScanTargetSplitSize));
+    }
+
+    public static DataSize getTargetSplitSize(ConnectorSession session, Scan<?, ?, ?> scan)
+    {
+        return getTargetSplitSize(IcebergSessionProperties.getTargetSplitSize(session), scan.targetSplitSize());
     }
 }
