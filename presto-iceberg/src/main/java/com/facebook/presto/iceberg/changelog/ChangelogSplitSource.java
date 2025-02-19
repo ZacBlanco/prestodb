@@ -69,13 +69,15 @@ public class ChangelogSplitSource
     private final double minimumAssignedSplitWeight;
     private final ConnectorSession session;
     private final List<IcebergColumnHandle> columnHandles;
+    private final long affinitySchedulingSectionSize;
 
     public ChangelogSplitSource(
             ConnectorSession session,
             TypeManager typeManager,
             Table table,
             IncrementalChangelogScan tableScan,
-            double minimumAssignedSplitWeight)
+            double minimumAssignedSplitWeight,
+            long affinitySchedulingSectionSize)
     {
         this.session = requireNonNull(session, "session is null");
         requireNonNull(typeManager, "typeManager is null");
@@ -84,6 +86,7 @@ public class ChangelogSplitSource
         this.minimumAssignedSplitWeight = minimumAssignedSplitWeight;
         this.fileScanTaskIterable = closer.register(tableScan.planFiles());
         this.fileScanTaskIterator = closer.register(fileScanTaskIterable.iterator());
+        this.affinitySchedulingSectionSize = affinitySchedulingSectionSize;
     }
 
     @Override
@@ -151,6 +154,7 @@ public class ChangelogSplitSource
                         changeTask.changeOrdinal(),
                         changeTask.commitSnapshotId(),
                         columnHandles)),
-                getDataSequenceNumber(task.file()));
+                getDataSequenceNumber(task.file()),
+                affinitySchedulingSectionSize);
     }
 }

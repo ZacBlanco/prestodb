@@ -16,6 +16,7 @@ package com.facebook.presto.iceberg;
 import com.facebook.airlift.concurrent.ThreadPoolExecutorMBean;
 import com.facebook.presto.common.predicate.TupleDomain;
 import com.facebook.presto.common.type.TypeManager;
+import com.facebook.presto.hive.HiveClientConfig;
 import com.facebook.presto.iceberg.changelog.ChangelogSplitSource;
 import com.facebook.presto.iceberg.equalitydeletes.EqualityDeletesSplitSource;
 import com.facebook.presto.spi.ConnectorSession;
@@ -57,17 +58,20 @@ public class IcebergSplitManager
     private final TypeManager typeManager;
     private final ExecutorService executor;
     private final ThreadPoolExecutorMBean executorServiceMBean;
+    private final long affinitySchedulingSectionSize;
 
     @Inject
     public IcebergSplitManager(
             IcebergTransactionManager transactionManager,
             TypeManager typeManager,
-            @ForIcebergSplitManager ExecutorService executor)
+            @ForIcebergSplitManager ExecutorService executor,
+            HiveClientConfig hiveClientConfig)
     {
         this.transactionManager = requireNonNull(transactionManager, "transactionManager is null");
         this.typeManager = requireNonNull(typeManager, "typeManager is null");
         this.executor = requireNonNull(executor, "executor is null");
         this.executorServiceMBean = new ThreadPoolExecutorMBean((ThreadPoolExecutor) executor);
+        this.affinitySchedulingSectionSize = hiveClientConfig.getAffinitySchedulingFileSectionSize().toBytes();
     }
 
     @Override
@@ -96,7 +100,7 @@ public class IcebergSplitManager
             IncrementalChangelogScan scan = icebergTable.newIncrementalChangelogScan()
                     .fromSnapshotExclusive(fromSnapshot)
                     .toSnapshot(toSnapshot);
-            return new ChangelogSplitSource(session, typeManager, icebergTable, scan, getTargetSplitSize(session, scan).toBytes());
+            return new ChangelogSplitSource(session, typeManager, icebergTable, scan, getTargetSplitSize(session, scan).toBytes(), affinitySchedulingSectionSize);
         }
         else if (table.getIcebergTableName().getTableType() == EQUALITY_DELETES) {
             CloseableIterable<DeleteFile> deleteFiles = IcebergUtil.getDeleteFiles(icebergTable,
@@ -105,7 +109,7 @@ public class IcebergSplitManager
                     table.getPartitionSpecId(),
                     table.getEqualityFieldIds());
 
-            return new EqualityDeletesSplitSource(session, icebergTable, deleteFiles);
+            return new EqualityDeletesSplitSource(session, icebergTable, deleteFiles, affinitySchedulingSectionSize);
         }
         else {
             TableScan tableScan = icebergTable.newScan()
@@ -120,7 +124,8 @@ public class IcebergSplitManager
                     tableScan,
                     TableScanUtil.splitFiles(tableScan.planFiles(), getTargetSplitSize(session, tableScan).toBytes()),
                     getMinimumAssignedSplitWeight(session),
-                    getMetadataColumnConstraints(layoutHandle.getValidPredicate()));
+                    getMetadataColumnConstraints(layoutHandle.getValidPredicate()),
+                    affinitySchedulingSectionSize);
             return splitSource;
         }
     }

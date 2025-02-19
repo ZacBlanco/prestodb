@@ -58,6 +58,7 @@ public class IcebergSplitSource
     private final Closer closer = Closer.create();
     private final double minimumAssignedSplitWeight;
     private final ConnectorSession session;
+    private final long maxAffinitySchedulingSectionSize;
 
     private final TupleDomain<IcebergColumnHandle> metadataColumnConstraints;
 
@@ -66,13 +67,15 @@ public class IcebergSplitSource
             TableScan tableScan,
             CloseableIterable<FileScanTask> fileScanTaskIterable,
             double minimumAssignedSplitWeight,
-            TupleDomain<IcebergColumnHandle> metadataColumnConstraints)
+            TupleDomain<IcebergColumnHandle> metadataColumnConstraints,
+            long maxAffinitySchedulingSectionSize)
     {
         this.session = requireNonNull(session, "session is null");
         this.tableScan = requireNonNull(tableScan, "tableScan is null");
         this.fileScanTaskIterator = fileScanTaskIterable.iterator();
         this.minimumAssignedSplitWeight = minimumAssignedSplitWeight;
         this.metadataColumnConstraints = requireNonNull(metadataColumnConstraints, "metadataColumnConstraints is null");
+        this.maxAffinitySchedulingSectionSize = maxAffinitySchedulingSectionSize;
         closer.register(fileScanTaskIterator);
     }
 
@@ -135,6 +138,7 @@ public class IcebergSplitSource
                 SplitWeight.fromProportion(Math.min(Math.max((double) task.length() / getTargetSplitSize(session, tableScan).toBytes(), minimumAssignedSplitWeight), 1.0)),
                 task.deletes().stream().map(DeleteFile::fromIceberg).collect(toImmutableList()),
                 Optional.empty(),
-                getDataSequenceNumber(task.file()));
+                getDataSequenceNumber(task.file()),
+                maxAffinitySchedulingSectionSize);
     }
 }

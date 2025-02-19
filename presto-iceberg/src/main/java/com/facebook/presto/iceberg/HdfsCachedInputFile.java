@@ -15,7 +15,6 @@ package com.facebook.presto.iceberg;
 
 import com.facebook.airlift.log.Logger;
 import org.apache.iceberg.io.ByteBufferInputStream;
-import org.apache.iceberg.io.IOUtil;
 import org.apache.iceberg.io.InputFile;
 import org.apache.iceberg.io.SeekableInputStream;
 

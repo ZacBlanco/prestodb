@@ -51,6 +51,7 @@ public class IcebergSplit
     private final List<DeleteFile> deletes;
     private final Optional<ChangelogSplitInfo> changelogSplitInfo;
     private final long dataSequenceNumber;
+    private final long affinitySchedulingSectionSize;
 
     @JsonCreator
     public IcebergSplit(
@@ -66,7 +67,8 @@ public class IcebergSplit
             @JsonProperty("splitWeight") SplitWeight splitWeight,
             @JsonProperty("deletes") List<DeleteFile> deletes,
             @JsonProperty("changelogSplitInfo") Optional<ChangelogSplitInfo> changelogSplitInfo,
-            @JsonProperty("dataSequenceNumber") long dataSequenceNumber)
+            @JsonProperty("dataSequenceNumber") long dataSequenceNumber,
+            @JsonProperty("affinitySchedulingSectionSize") long maxAffinitySchedulingSectionSize)
     {
         requireNonNull(nodeSelectionStrategy, "nodeSelectionStrategy is null");
         this.path = requireNonNull(path, "path is null");
@@ -82,6 +84,7 @@ public class IcebergSplit
         this.deletes = ImmutableList.copyOf(requireNonNull(deletes, "deletes is null"));
         this.changelogSplitInfo = requireNonNull(changelogSplitInfo, "changelogSplitInfo is null");
         this.dataSequenceNumber = dataSequenceNumber;
+        this.affinitySchedulingSectionSize = maxAffinitySchedulingSectionSize;
     }
 
     @JsonProperty
@@ -143,7 +146,7 @@ public class IcebergSplit
     public List<HostAddress> getPreferredNodes(NodeProvider nodeProvider)
     {
         if (getNodeSelectionStrategy() == SOFT_AFFINITY) {
-            return nodeProvider.get(path);
+            return nodeProvider.get(path + "#" + start / affinitySchedulingSectionSize);
         }
         return addresses;
     }
@@ -171,6 +174,12 @@ public class IcebergSplit
     public long getDataSequenceNumber()
     {
         return dataSequenceNumber;
+    }
+
+    @JsonProperty
+    public long getAffinitySchedulingSectionSize()
+    {
+        return affinitySchedulingSectionSize;
     }
 
     @Override
