@@ -7,3 +7,6 @@
 -XX:+HeapDumpOnOutOfMemoryError
 -XX:+ExitOnOutOfMemoryError
 -Djdk.attach.allowAttachSelf=true
+--add-opens=java.base/java.lang=ALL-UNNAMED
+--add-opens=java.base/java.lang.reflect=ALL-UNNAMED
+
