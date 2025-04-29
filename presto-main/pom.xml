@@ -74,17 +74,17 @@
         </dependency>
 
         <dependency>
-            <groupId>com.facebook.drift</groupId>
+            <groupId>com.facebook.airlift.drift</groupId>
             <artifactId>drift-codec-utils</artifactId>
         </dependency>
 
         <dependency>
-            <groupId>com.facebook.drift</groupId>
+            <groupId>com.facebook.airlift.drift</groupId>
             <artifactId>drift-server</artifactId>
         </dependency>
 
         <dependency>
-            <groupId>com.facebook.drift</groupId>
+            <groupId>com.facebook.airlift.drift</groupId>
             <artifactId>drift-transport-spi</artifactId>
         </dependency>
 
@@ -144,7 +144,7 @@
         </dependency>
 
         <dependency>
-            <groupId>com.facebook.drift</groupId>
+            <groupId>com.facebook.airlift.drift</groupId>
             <artifactId>drift-codec</artifactId>
         </dependency>
         <dependency>
@@ -156,15 +156,19 @@
             <artifactId>error_prone_annotations</artifactId>
         </dependency>
         <dependency>
-            <groupId>com.facebook.drift</groupId>
+            <groupId>com.facebook.airlift.drift</groupId>
             <artifactId>drift-client</artifactId>
         </dependency>
         <dependency>
-            <groupId>com.facebook.drift</groupId>
+            <groupId>com.facebook.airlift.drift</groupId>
             <artifactId>drift-transport-netty</artifactId>
         </dependency>
         <dependency>
-            <groupId>com.facebook.drift</groupId>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-buffer</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.facebook.airlift.drift</groupId>
             <artifactId>drift-api</artifactId>
         </dependency>
         <dependency>
@@ -196,7 +200,7 @@
             <artifactId>presto-client</artifactId>
         </dependency>
         <dependency>
-            <groupId>com.facebook.drift</groupId>
+            <groupId>com.facebook.airlift.drift</groupId>
             <artifactId>drift-protocol</artifactId>
         </dependency>
         <dependency>
@@ -358,7 +362,8 @@
                 <configuration>
                     <ignoredNonTestScopedDependencies>
                         <!-- TTransportException needed from drift-protocol to compile -->
-                        <ignoredNonTestScopedDependency>com.facebook.drift:drift-protocol</ignoredNonTestScopedDependency>
+                        <ignoredNonTestScopedDependency>com.facebook.airlift.drift:drift-protocol</ignoredNonTestScopedDependency>
+                        <ignoredNonTestScopedDependency>io.netty:netty-buffer</ignoredNonTestScopedDependency>
                     </ignoredNonTestScopedDependencies>
                 </configuration>
             </plugin>
