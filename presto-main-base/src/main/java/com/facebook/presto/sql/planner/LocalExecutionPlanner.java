@@ -242,7 +242,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableMap.Builder;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableSetMultimap;
-import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.SetMultimap;
@@ -367,7 +366,7 @@ import static com.google.common.collect.DiscreteDomain.integers;
 import static com.google.common.collect.ImmutableList.toImmutableList;
 import static com.google.common.collect.ImmutableMap.toImmutableMap;
 import static com.google.common.collect.ImmutableSet.toImmutableSet;
-import static com.google.common.collect.Iterables.getOnlyElement;
+import static com.google.common.collect.MoreCollectors.onlyElement;
 import static com.google.common.collect.Range.closedOpen;
 import static java.lang.Math.toIntExact;
 import static java.lang.String.format;
@@ -609,7 +608,7 @@ public class LocalExecutionPlanner
         // partitioningColumns expected to have one column in the normal case, and zero columns when partitioning on a constant
         checkArgument(!partitioningScheme.isReplicateNullsAndAny() || partitioningColumns.size() <= 1);
         if (partitioningScheme.isReplicateNullsAndAny() && partitioningColumns.size() == 1) {
-            nullChannel = OptionalInt.of(outputLayout.indexOf(getOnlyElement(partitioningColumns)));
+            nullChannel = OptionalInt.of(outputLayout.indexOf(partitioningColumns.stream().collect(onlyElement())));
         }
 
         return Optional.of(new OutputPartitioning(partitionFunction, partitionChannels, partitionConstants, partitioningScheme.isReplicateNullsAndAny(), nullChannel));
@@ -1829,7 +1828,7 @@ public class LocalExecutionPlanner
                 if (potentialProbeInputs.size() > 1) {
                     overlappingFieldSetsBuilder.add(potentialProbeInputs.stream().collect(toImmutableSet()));
                 }
-                remappedProbeKeyChannelsBuilder.add(Iterables.getFirst(potentialProbeInputs, null));
+                remappedProbeKeyChannelsBuilder.add(potentialProbeInputs.stream().findFirst().orElse(null));
             }
             List<Set<Integer>> overlappingFieldSets = overlappingFieldSetsBuilder.build();
             List<Integer> remappedProbeKeyChannels = remappedProbeKeyChannelsBuilder.build();
@@ -3234,7 +3233,7 @@ public class LocalExecutionPlanner
             // local merge source must have a single driver
             context.setDriverInstanceCount(1);
 
-            PlanNode sourceNode = getOnlyElement(node.getSources());
+            PlanNode sourceNode = node.getSources().stream().collect(onlyElement());
             LocalExecutionPlanContext subContext = context.createSubContext();
             PhysicalOperation source = sourceNode.accept(this, subContext);
 

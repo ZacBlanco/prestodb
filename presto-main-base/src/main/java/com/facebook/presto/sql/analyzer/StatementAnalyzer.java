@@ -384,7 +384,7 @@ import static com.google.common.base.Verify.verify;
 import static com.google.common.collect.ImmutableList.toImmutableList;
 import static com.google.common.collect.ImmutableMap.toImmutableMap;
 import static com.google.common.collect.ImmutableSet.toImmutableSet;
-import static com.google.common.collect.Iterables.getOnlyElement;
+import static com.google.common.collect.MoreCollectors.onlyElement;
 import static java.lang.Math.toIntExact;
 import static java.lang.String.format;
 import static java.util.Collections.emptyList;
@@ -2177,7 +2177,7 @@ class StatementAnalyzer
                     if (candidates.size() > 1) {
                         throw new SemanticException(TABLE_FUNCTION_INVALID_COPARTITIONING, name.getOriginalParts().get(0), "Ambiguous reference: multiple table arguments found for name: " + name);
                     }
-                    TableArgumentAnalysis argument = getOnlyElement(candidates);
+                    TableArgumentAnalysis argument = candidates.stream().collect(onlyElement());
                     if (!referencedArguments.add(argument.getArgumentName())) {
                         // multiple references to argument in COPARTITION clause are implicitly prohibited by
                         // ISO/IEC TR REPORT 19075-7, p.33, Feature B203, “More than one copartition specification”
@@ -4082,7 +4082,7 @@ class StatementAnalyzer
                 }
 
                 if (expressions.size() == 1) {
-                    return getOnlyElement(expressions);
+                    return expressions.stream().collect(onlyElement());
                 }
 
                 // otherwise, couldn't resolve name against output aliases, so fall through...
@@ -4432,7 +4432,7 @@ class StatementAnalyzer
 
         private void analyzeGroupingOperations(QuerySpecification node, List<Expression> outputExpressions, List<Expression> orderByExpressions)
         {
-            List<GroupingOperation> groupingOperations = extractExpressions(Iterables.concat(outputExpressions, orderByExpressions), GroupingOperation.class);
+            List<GroupingOperation> groupingOperations = extractExpressions(Stream.concat(outputExpressions.stream(), orderByExpressions.stream()).collect(toImmutableList()), GroupingOperation.class);
             boolean isGroupingOperationPresent = !groupingOperations.isEmpty();
 
             if (isGroupingOperationPresent && !node.getGroupBy().isPresent()) {
@@ -4450,7 +4450,7 @@ class StatementAnalyzer
                 List<Expression> outputExpressions,
                 List<Expression> orderByExpressions)
         {
-            List<FunctionCall> aggregates = extractAggregateFunctions(analysis.getFunctionHandles(), Iterables.concat(outputExpressions, orderByExpressions), functionAndTypeResolver);
+            List<FunctionCall> aggregates = extractAggregateFunctions(analysis.getFunctionHandles(), Stream.concat(outputExpressions.stream(), orderByExpressions.stream()).collect(toImmutableList()), functionAndTypeResolver);
             analysis.setAggregates(node, aggregates);
             return aggregates;
         }

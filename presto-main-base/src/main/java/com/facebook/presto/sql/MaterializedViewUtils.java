@@ -54,7 +54,9 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -62,7 +64,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.Stack;
 
 import static com.facebook.presto.SystemSessionProperties.isLegacyMaterializedViews;
 import static com.facebook.presto.common.predicate.TupleDomain.extractFixedValues;
@@ -201,9 +202,9 @@ public final class MaterializedViewUtils
         for (T node : graph.keySet()) {
             // Do depth first search for each node to find its connected component
             Set<T> visited = new HashSet<>();
-            Stack<T> stack = new Stack<>();
+            Deque<T> stack = new ArrayDeque<>();
             stack.push(node);
-            while (!stack.empty()) {
+            while (!stack.isEmpty()) {
                 T current = stack.pop();
                 if (visited.contains(current)) {
                     continue;

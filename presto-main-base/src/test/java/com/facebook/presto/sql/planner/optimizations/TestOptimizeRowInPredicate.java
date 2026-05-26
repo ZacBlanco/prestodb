@@ -36,6 +36,7 @@ import io.airlift.slice.Slices;
 import org.testng.annotations.Test;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 
@@ -133,7 +134,7 @@ public class TestOptimizeRowInPredicate
                     assertColumnNotIn(disjuncts.get(0), "c1", 2);
                     assertColumnNotIn(disjuncts.get(1), "c2", 2);
                     assertTrue(disjuncts.get(2) instanceof CallExpression);
-                    assertEquals(((CallExpression) disjuncts.get(2)).getDisplayName().toLowerCase(), "not");
+                    assertEquals(((CallExpression) disjuncts.get(2)).getDisplayName().toLowerCase(Locale.ENGLISH), "not");
                 });
     }
 
@@ -352,7 +353,7 @@ public class TestOptimizeRowInPredicate
     {
         assertTrue(expr instanceof CallExpression, expr + " is not a CallExpression");
         CallExpression notExpr = (CallExpression) expr;
-        assertEquals(notExpr.getDisplayName().toLowerCase(), "not");
+        assertEquals(notExpr.getDisplayName().toLowerCase(Locale.ENGLISH), "not");
         assertEquals(notExpr.getArguments().size(), 1);
         assertColumnIn(notExpr.getArguments().get(0), varName, expectedValueCount);
     }
