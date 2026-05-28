@@ -1,0 +1,71 @@
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+
+syntax = "proto3";
+
+package presto.v2;
+
+import "presto/v2/common.proto";
+import "presto/v2/session.proto";
+
+option java_multiple_files = true;
+option java_package = "com.facebook.presto.protocol.v2";
+
+message TaskUpdateRequest {
+  SessionRepresentation session = 1;
+  map<string, string> extra_credentials = 2;
+  optional bytes fragment = 3;
+  repeated TaskSource sources = 4;
+  OutputBuffers output_ids = 5;
+  optional TableWriteInfo table_write_info = 6;
+}
+
+message TaskSource {
+  string plan_node_id = 1;
+  repeated ScheduledSplit splits = 2;
+  repeated Lifespan no_more_splits_for_lifespan = 3;
+  bool no_more_splits = 4;
+}
+
+message ScheduledSplit {
+  int64 sequence_id = 1;
+  string plan_node_id = 2;
+  ConnectorPayload split = 3;
+}
+
+message OutputBuffers {
+  BufferType type = 1;
+  int64 version = 2;
+  bool no_more_buffer_ids = 3;
+  repeated OutputBuffer buffers = 4;
+}
+
+message OutputBuffer {
+  int32 id = 1;
+  int32 partition = 2;
+}
+
+enum BufferType {
+  BUFFER_TYPE_UNKNOWN = 0;
+  BUFFER_TYPE_PARTITIONED = 1;
+  BUFFER_TYPE_BROADCAST = 2;
+  BUFFER_TYPE_ARBITRARY = 3;
+  BUFFER_TYPE_DISCARDING = 4;
+  BUFFER_TYPE_SPOOLING = 5;
+}
+
+message TableWriteInfo {
+  optional ConnectorPayload writer_target = 1;
+  optional ConnectorPayload analyze_table_handle = 2;
+}

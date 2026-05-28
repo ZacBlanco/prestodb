@@ -163,6 +163,7 @@
         <module>presto-client</module>
         <module>presto-parser</module>
         <module>presto-internal-communication</module>
+        <module>presto-protocol</module>
         <module>presto-main-base</module>
         <module>presto-main-tests</module>
         <module>presto-main</module>

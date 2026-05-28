@@ -1,0 +1,67 @@
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+
+syntax = "proto3";
+
+package presto.v2;
+
+import "presto/v2/common.proto";
+
+option java_multiple_files = true;
+option java_package = "com.facebook.presto.protocol.v2";
+
+message SessionRepresentation {
+  string query_id = 1;
+  optional string transaction_id = 2;
+  bool client_transaction_support = 3;
+  string user = 4;
+  optional string principal = 5;
+  optional string source = 6;
+  optional string catalog = 7;
+  optional string schema = 8;
+  optional string trace_token = 9;
+  int32 time_zone_key = 10;
+  string locale = 11;
+  optional string remote_user_address = 12;
+  optional string user_agent = 13;
+  optional string client_info = 14;
+  repeated string client_tags = 15;
+  int64 start_time = 16;
+  map<string, string> resource_estimates = 17;
+  map<string, string> system_properties = 18;
+  map<string, StringMap> catalog_properties = 19;
+  map<string, StringMap> unprocessed_catalog_properties = 20;
+  map<string, SelectedRole> roles = 21;
+  map<string, string> prepared_statements = 22;
+  repeated SqlInvokedFunction session_functions = 23;
+  optional string selected_user = 24;
+  optional string reason_for_select = 25;
+}
+
+message SelectedRole {
+  SelectedRoleType type = 1;
+  optional string role = 2;
+}
+
+enum SelectedRoleType {
+  SELECTED_ROLE_TYPE_UNKNOWN = 0;
+  SELECTED_ROLE_TYPE_ROLE = 1;
+  SELECTED_ROLE_TYPE_ALL = 2;
+  SELECTED_ROLE_TYPE_NONE = 3;
+}
+
+message SqlInvokedFunction {
+  string id = 1;
+  ConnectorPayload serialized_function = 2;
+}
