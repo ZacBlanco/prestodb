@@ -4,9 +4,25 @@ Release 0.298
 
 **Breaking Changes**
 ====================
+* The default value of ``field_names_in_json_cast_enabled`` changes from ``false`` to ``true``. When enabled, JSON fields are assigned to ROW fields by matching field names regardless of order. Queries that rely on JSON field order when casting to ROW may return different results after upgrading. Restore the previous behavior by setting ``SET SESSION field_names_in_json_cast_enabled = false;``. `#26833 <https://github.com/prestodb/presto/pull/26833>`_
+* Fix query statistics so that `planningTime` and `finishingTime` are no longer added to `executionTime`. `executionTime` is now the true execution time — how long it took the query to run the compute. It can be used to measure the efficiency of the workers without added planning time or the time spent on final steps such as partition registration. `#27691 <https://github.com/prestodb/presto/pull/27691>`_
+* Remove configuration property ``use-new-nan-definition``. `#27829 <https://github.com/prestodb/presto/pull/27829>`_
+* Remove ``warn-on-common-nan-patterns`` server config and ``warn_on_common_nan_patterns`` session property. The NaN definition migration is complete and these warnings are no longer needed. `#27830 <https://github.com/prestodb/presto/pull/27830>`_
 
 **Highlights**
 ==============
+* Add incremental refresh for materialized views in the Iceberg connector, enabling efficient partial refreshes instead of full recomputation. `#26959 <https://github.com/prestodb/presto/pull/26959>`_
+* Add support for Azure Blob Storage (``wasb[s]://``) and Azure Data Lake Storage Gen2 (``abfs[s]://``) in the Hive connector, with shared key and OAuth2 authentication. `#25107 <https://github.com/prestodb/presto/pull/25107>`_
+* Add ``ALTER MATERIALIZED VIEW <name> SET PROPERTIES (...)`` SQL statement to update materialized view properties after creation. `#27806 <https://github.com/prestodb/presto/pull/27806>`_
+* Improve materialized view query rewriting to support ``GROUP BY``, ``ORDER BY`` ordinal references, scalar functions (``CONCAT``, ``ABS``, ``JSON_EXTRACT``, ``CAST``, ``IF``, ``COALESCE``, ``CASE``), and ``HAVING`` clauses. `#27422 <https://github.com/prestodb/presto/pull/27422>`_ `#27549 <https://github.com/prestodb/presto/pull/27549>`_ `#27677 <https://github.com/prestodb/presto/pull/27677>`_
+* Add TopN late materialization optimization for ``ORDER BY ... LIMIT`` over wide tables with a unique ``$row_id`` column, sorting only sort keys first and fetching full rows via SemiJoin. `#27641 <https://github.com/prestodb/presto/pull/27641>`_
+* Improve coordinator-to-worker communication efficiency with 20-40% smaller payload sizes and 2-3x faster serialization compared to JSON. `#27486 <https://github.com/prestodb/presto/pull/27486>`_
+* Improve query planning performance for wide-column queries with O(1) field lookup indexing and fast-path optimizations across multiple optimizer rules. `#27553 <https://github.com/prestodb/presto/pull/27553>`_ `#27547 <https://github.com/prestodb/presto/pull/27547>`_
+* Add TLS/SSL configuration, i18n character set, and configurable JDBC fetch size support for the Oracle connector. `#27671 <https://github.com/prestodb/presto/pull/27671>`_ `#27670 <https://github.com/prestodb/presto/pull/27670>`_ `#27669 <https://github.com/prestodb/presto/pull/27669>`_
+* Add Iceberg V3 row lineage hidden columns ``_row_id`` and ``_last_updated_sequence_number`` read support. `#27240 <https://github.com/prestodb/presto/pull/27240>`_
+* Add ``min/max/count`` aggregation push down based on file stats for Iceberg tables. `#27085 <https://github.com/prestodb/presto/pull/27085>`_
+* Add view querying capabilities and upgrade to mongodb-driver-sync in the MongoDB connector. `#26995 <https://github.com/prestodb/presto/pull/26995>`_ `#27685 <https://github.com/prestodb/presto/pull/27685>`_
+* Add support for reading Delta Lake tables with column mapping enabled. `#27483 <https://github.com/prestodb/presto/pull/27483>`_
 
 **Details**
 ===========
