@@ -63,7 +63,7 @@ ________________
 * Upgrade google-oauth-client version to 1.34.1 to address `CVE-2020-7692 <https://github.com/advisories/GHSA-f263-c949-w85g>`_ and `CVE-2021-22573 <https://github.com/advisories/GHSA-hw42-3568-wj87>`_. `#25424 <https://github.com/prestodb/presto/pull/25424>`_
 * Upgrade http-proxy-middleware from 2.0.7 to 2.0.9  in /presto-ui/src to resolve `CVE-2025-32996 <https://nvd.nist.gov/vuln/detail/CVE-2025-32996>`_. `#27715 <https://github.com/prestodb/presto/pull/27715>`_
 * Upgrade jackson dependency from 2.15.4 to version 2.18.6 to address `GHSA-72hv-8253-57qq <https://github.com/advisories/GHSA-72hv-8253-57qq>`_. `#27293 <https://github.com/prestodb/presto/pull/27293>`_
-* Upgrade jetty dependency from 0.27 to version 2.0.2 to address `CVE-2025-11143 <https://github.com/advisories/GHSA-wjpw-4j6x-6rwh>` and `CVE-2026-1605 <https://github.com/advisories/GHSA-xxh7-fcf3-rj7f>`_. `#27294 <https://github.com/prestodb/presto/pull/27294>`_
+* Upgrade jetty dependency from 0.27 to version 2.0.2 to address `CVE-2025-11143 <https://github.com/advisories/GHSA-wjpw-4j6x-6rwh>`_ and `CVE-2026-1605 <https://github.com/advisories/GHSA-xxh7-fcf3-rj7f>`_. `#27294 <https://github.com/prestodb/presto/pull/27294>`_
 * Upgrade libthrift 0.23.0 in response to `CVE-2026-41604 <https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2026-41604>`_. `#27777 <https://github.com/prestodb/presto/pull/27777>`_
 * Upgrade lodash from 4.17.23 to 4.18.1 to address multiple security vulnerabilities: - `CVE-2026-4800 <https://nvd.nist.gov/vuln/detail/CVE-2026-4800>`_. This dependency is used for local development only and does not affect production runtime. `#27497 <https://github.com/prestodb/presto/pull/27497>`_
 * Upgrade lodash-es from 4.17.23 to 4.18.1 to address `CVE-2026-4800 <https://nvd.nist.gov/vuln/detail/CVE-2026-4800>`_. This dependency is used for local development only and does not affect production runtime. `#27496 <https://github.com/prestodb/presto/pull/27496>`_
@@ -93,24 +93,24 @@ _________________________
 * Fix access control for materialized view storage tables when ``legacy_materialized_views=false``: storage-table access control is bypassed during MV expansion, while direct queries by name still go through access control. `#27728 <https://github.com/prestodb/presto/pull/27728>`_
 * Fix failure during ``INSERT`` into Iceberg tables partitioned by day() when using timestamp with time zone columns. `#27645 <https://github.com/prestodb/presto/pull/27645>`_
 * Improve updating of ``stale_read_behavior``, ``staleness_window``, and ``refresh_type`` on existing materialized views with ``ALTER MATERIALIZED VIEW ... SET PROPERTIES`` (requires ``legacy_materialized_views=false``). `#27806 <https://github.com/prestodb/presto/pull/27806>`_
-* Add ``iceberg.materialized-view-default-max-snapshots-per-refresh`` config property and matching session property to set the default bound. `#27774 <https://github.com/prestodb/presto/pull/27774>`_
-* Add ``iceberg.materialized-view-default-storage-schema`` config to route storage tables into a single schema. Defaults to the materialized view's own schema; per-MV ``storage_schema`` overrides. `#27728 <https://github.com/prestodb/presto/pull/27728>`_
-* Add ``max_snapshots_per_refresh`` materialized view property to bound how far each base table advances per ``REFRESH MATERIALIZED VIEW``. Defaults to ``0`` (unbounded). Requires Iceberg V3 row lineage; V2 tables fall back to unbounded refresh. `#27774 <https://github.com/prestodb/presto/pull/27774>`_
-* Add `materialized_view_stitching_strategy` and `materialized_view_incremental_refresh_strategy` session properties (values: `ALWAYS`, `NEVER`, `AUTOMATIC`; default: `ALWAYS`). Under `AUTOMATIC`, the optimizer selects between the rewrite and the full alternative based on cost; when stats are unavailable it falls back to row-count comparison. `#27820 <https://github.com/prestodb/presto/pull/27820>`_
+* Add ``iceberg.materialized-view-default-max-snapshots-per-refresh`` configuration property and matching session property to set the default bound. See :ref:`connector/iceberg:catalog configuration`. `#27774 <https://github.com/prestodb/presto/pull/27774>`_
+* Add ``iceberg.materialized-view-default-storage-schema`` configuration property to route storage tables into a single schema. Defaults to the materialized view's own schema; per-MV ``storage_schema`` overrides. See :ref:`connector/iceberg:catalog configuration`. `#27728 <https://github.com/prestodb/presto/pull/27728>`_
+* Add ``max_snapshots_per_refresh`` materialized view property to bound how far each base table advances per ``REFRESH MATERIALIZED VIEW``. Defaults to ``0`` (unbounded). Requires Iceberg V3 row lineage; V2 tables fall back to unbounded refresh. See :ref:`connector/iceberg:materialized view properties`. `#27774 <https://github.com/prestodb/presto/pull/27774>`_
+* Add ``materialized_view_stitching_strategy`` and ``materialized_view_incremental_refresh_strategy`` session properties (values: `ALWAYS`, `NEVER`, `AUTOMATIC`; default: `ALWAYS`). Under `AUTOMATIC`, the optimizer selects between the rewrite and the full alternative based on cost; when stats are unavailable it falls back to row-count comparison. See :ref:`connector/iceberg:session properties`. `#27820 <https://github.com/prestodb/presto/pull/27820>`_
 * Add changes for passing Iceberg V3 initial default values when reading. `#27659 <https://github.com/prestodb/presto/pull/27659>`_
 * Add incremental refresh for materialized views in the Iceberg connector. `#26959 <https://github.com/prestodb/presto/pull/26959>`_
 * Add low and high values for varchar/char columns of Iceberg tables. `#27357 <https://github.com/prestodb/presto/pull/27357>`_
 * Add metastore cache invalidation procedure for Iceberg connector. `#27200 <https://github.com/prestodb/presto/pull/27200>`_
 * Add predicate push down on ``_last_updated_sequence_number`` for file-level pruning. `#27766 <https://github.com/prestodb/presto/pull/27766>`_
 * Add read support for Iceberg V3 row lineage hidden columns `_row_id` and `_last_updated_sequence_number`. `#27240 <https://github.com/prestodb/presto/pull/27240>`_
-* Add support for ``min/max/count`` aggregation push down based on file stats. This can be toggled with the ``aggregate_push_down_enabled`` session property or the ``iceberg.aggregate-push-down-enabled`` configuration property. `#27085 <https://github.com/prestodb/presto/pull/27085>`_
-* Add support for updating column write-default values using `ALTER TABLE ... SET DEFAULT` (requires Iceberg format version 3+). `#27810 <https://github.com/prestodb/presto/pull/27810>`_
+* Add support for ``min/max/count`` aggregation push down based on file stats. This can be toggled with the ``aggregate_push_down_enabled`` session property or the ``iceberg.aggregate-push-down-enabled`` configuration property. See :ref:`connector/iceberg:session properties` and :ref:`connector/iceberg:configuration properties`.`#27085 <https://github.com/prestodb/presto/pull/27085>`_
+* Add support for updating column write-default values using ``ALTER TABLE ... SET DEFAULT`` (requires Iceberg format version 3+). `#27810 <https://github.com/prestodb/presto/pull/27810>`_
 * Add warning when predicate stitching or incremental refresh falls back to full recompute. `#27816 <https://github.com/prestodb/presto/pull/27816>`_
 * Update write-default operations to preserve existing initial-default values as metadata-only changes. `#27810 <https://github.com/prestodb/presto/pull/27810>`_
 
 Lance Connector Changes
 _______________________
-* Add SQL filter pushdown to reduce data read from disk for selective queries. Supports equality, comparisons, IN lists, IS NULL, and range predicates on Boolean, Integer, Bigint, Real, Double, Varchar, Date, and Timestamp types. `#27430 <https://github.com/prestodb/presto/pull/27430>`_
+* Add SQL filter pushdown to reduce data read from disk for selective queries. Supports equality, comparisons, IN lists, IS NULL, and range predicates on Boolean, Integer, Bigint, Real, Double, Varchar, Date, and Timestamp types. See :ref:`connector/lance:predicate pushdown`. `#27430 <https://github.com/prestodb/presto/pull/27430>`_
 * Add configurable index and metadata cache sizes via lance.index-cache-size and lance.metadata-cache-size. `#27325 <https://github.com/prestodb/presto/pull/27325>`_
 * Add version-aware dataset caching with snapshot isolation for consistent query reads. `#27325 <https://github.com/prestodb/presto/pull/27325>`_
 
@@ -121,8 +121,8 @@ _________________________
 
 Singlestore Connector Changes
 _____________________________
-* Fix TINYINT type mapping to preserve TINYINT semantics instead of incorrectly mapping to BOOLEAN after JDBC driver upgrade. `#27790 <https://github.com/prestodb/presto/pull/27790>`_
-* Fix varchar type mapping for TEXT types to use byte-based thresholds matching the JDBC driver's COLUMN_SIZE reporting. `#27790 <https://github.com/prestodb/presto/pull/27790>`_
+* Fix ``TINYINT`` type mapping to preserve ``TINYINT`` semantics instead of incorrectly mapping to ``BOOLEAN`` after a JDBC driver upgrade. `#27790 <https://github.com/prestodb/presto/pull/27790>`_
+* Fix varchar type mapping for ``TEXT`` types to use byte-based thresholds matching the JDBC driver's ``COLUMN_SIZE`` reporting. `#27790 <https://github.com/prestodb/presto/pull/27790>`_
 
 
 **Credits**
