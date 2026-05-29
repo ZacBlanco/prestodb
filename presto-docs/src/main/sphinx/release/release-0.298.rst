@@ -67,8 +67,8 @@ ________________
 * Upgrade libthrift 0.23.0 in response to `CVE-2026-41604 <https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2026-41604>`_. `#27777 <https://github.com/prestodb/presto/pull/27777>`_
 * Upgrade lodash from 4.17.23 to 4.18.1 to address multiple security vulnerabilities: - `CVE-2026-4800 <https://nvd.nist.gov/vuln/detail/CVE-2026-4800>`_. This dependency is used for local development only and does not affect production runtime. `#27497 <https://github.com/prestodb/presto/pull/27497>`_
 * Upgrade lodash-es from 4.17.23 to 4.18.1 to address `CVE-2026-4800 <https://nvd.nist.gov/vuln/detail/CVE-2026-4800>`_. This dependency is used for local development only and does not affect production runtime. `#27496 <https://github.com/prestodb/presto/pull/27496>`_
-* Upgrade org.apache.kafka:kafka-clients from 3.9.1 to 3.9.2 inorder to address `CVE-2026-35554 <https://github.com/advisories/GHSA-5qcv-4rpc-jp93>`_. `#27574 <https://github.com/prestodb/presto/pull/27574>`_
-* Upgrade org.apache.logging.log4j:log4j-core from 2.25.3 to 2.25.4 inorder to address `CVE-2026-34480 <https://nvd.nist.gov/vuln/detail/CVE-2026-34480>`_. `#27583 <https://github.com/prestodb/presto/pull/27583>`_
+* Upgrade org.apache.kafka:kafka-clients from 3.9.1 to 3.9.2 in order to address `CVE-2026-35554 <https://github.com/advisories/GHSA-5qcv-4rpc-jp93>`_. `#27574 <https://github.com/prestodb/presto/pull/27574>`_
+* Upgrade org.apache.logging.log4j:log4j-core from 2.25.3 to 2.25.4 in order to address `CVE-2026-34480 <https://nvd.nist.gov/vuln/detail/CVE-2026-34480>`_. `#27583 <https://github.com/prestodb/presto/pull/27583>`_
 * Upgrade org.bouncycastle:bcprov-jdk18on from 1.81 to 1.84 to resolve `CVE-2026-0636 <https://nvd.nist.gov/vuln/detail/CVE-2026-0636>`_. `#27606 <https://github.com/prestodb/presto/pull/27606>`_
 * Upgrade org.postgresql:postgresql from 42.7.9 to 42.7.11 to resolve `CVE-2026-42198 <https://nvd.nist.gov/vuln/detail/CVE-2026-42198>`_. `#27722 <https://github.com/prestodb/presto/pull/27722>`_
 * Upgrade parquet-jackson to 1.17.1 in response to `GHSA-72hv-8253-57qq <https://github.com/advisories/GHSA-72hv-8253-57qq>`_. `#27803 <https://github.com/prestodb/presto/pull/27803>`_
@@ -91,6 +91,7 @@ ______________________
 Iceberg Connector Changes
 _________________________
 * Fix access control for materialized view storage tables when ``legacy_materialized_views=false``: storage-table access control is bypassed during MV expansion, while direct queries by name still go through access control. `#27728 <https://github.com/prestodb/presto/pull/27728>`_
+* Improve updating of ``stale_read_behavior``, ``staleness_window``, and ``refresh_type`` on existing materialized views with ``ALTER MATERIALIZED VIEW ... SET PROPERTIES`` (requires ``legacy_materialized_views=false``). :pr:`27806`. `#27806 <https://github.com/prestodb/presto/pull/27806>`_
 * Add ``iceberg.materialized-view-default-max-snapshots-per-refresh`` config property and matching session property to set the default bound. `#27774 <https://github.com/prestodb/presto/pull/27774>`_
 * Add ``iceberg.materialized-view-default-storage-schema`` config to route storage tables into a single schema. Defaults to the materialized view's own schema; per-MV ``storage_schema`` overrides. `#27728 <https://github.com/prestodb/presto/pull/27728>`_
 * Add ``max_snapshots_per_refresh`` materialized view property to bound how far each base table advances per ``REFRESH MATERIALIZED VIEW``. Defaults to ``0`` (unbounded). Requires Iceberg V3 row lineage; V2 tables fall back to unbounded refresh. `#27774 <https://github.com/prestodb/presto/pull/27774>`_
@@ -115,9 +116,6 @@ _______________________
 MongoDB Connector Changes
 _________________________
 * Add view querying capabilities in the Mongo connector. `#26995 <https://github.com/prestodb/presto/pull/26995>`_
-
-Mongodb Connector Changes
-_________________________
 * Upgrade mongo-java-driver to mongodb-driver-sync. `#27685 <https://github.com/prestodb/presto/pull/27685>`_
 
 Singlestore Connector Changes
@@ -129,9 +127,6 @@ Native Sidecar Plugin Changes
 _____________________________
 * Add support for adding plugin loaded types in sidecar plugin. `#27748 <https://github.com/prestodb/presto/pull/27748>`_
 
-Iceberg Changes
-_______________
-* Allow updating ``stale_read_behavior``, ``staleness_window``, and ``refresh_type`` on existing materialized views via ``ALTER MATERIALIZED VIEW ... SET PROPERTIES`` (requires ``legacy_materialized_views=false``). :pr:`27806`. `#27806 <https://github.com/prestodb/presto/pull/27806>`_
 
 **Credits**
 ===========
