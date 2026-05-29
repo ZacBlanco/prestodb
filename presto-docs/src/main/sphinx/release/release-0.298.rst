@@ -103,7 +103,7 @@ _________________________
 * Add metastore cache invalidation procedure for Iceberg connector. `#27200 <https://github.com/prestodb/presto/pull/27200>`_
 * Add predicate push down on ``_last_updated_sequence_number`` for file-level pruning. `#27766 <https://github.com/prestodb/presto/pull/27766>`_
 * Add read support for Iceberg V3 row lineage hidden columns `_row_id` and `_last_updated_sequence_number`. `#27240 <https://github.com/prestodb/presto/pull/27240>`_
-* Add support for ``min/max/count`` aggregation push down based on file stats. This can be toggled with the ``aggregate_push_down_enabled`` session property or the ``iceberg.aggregate-push-down-enabled`` configuration property. See :ref:`connector/iceberg:session properties` and :ref:`connector/iceberg:configuration properties`.`#27085 <https://github.com/prestodb/presto/pull/27085>`_
+* Add support for ``min/max/count`` aggregation push down based on file stats. This can be toggled with the ``aggregate_push_down_enabled`` session property or the ``iceberg.aggregate-push-down-enabled`` configuration property. See :ref:`connector/iceberg:session properties` and :ref:`connector/iceberg:configuration properties`. `#27085 <https://github.com/prestodb/presto/pull/27085>`_
 * Add support for updating column write-default values using ``ALTER TABLE ... SET DEFAULT`` (requires Iceberg format version 3+). `#27810 <https://github.com/prestodb/presto/pull/27810>`_
 * Add warning when predicate stitching or incremental refresh falls back to full recompute. `#27816 <https://github.com/prestodb/presto/pull/27816>`_
 * Update write-default operations to preserve existing initial-default values as metadata-only changes. `#27810 <https://github.com/prestodb/presto/pull/27810>`_
