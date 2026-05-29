@@ -13,7 +13,7 @@ Release 0.298
 
 General Changes
 _______________
-* Fix 'planningTime' and 'finishingTime' are no longer added to the 'executionTime'. 'executionTime' is now a true execution time - how long it took the query to run the compute. It can be used to measure the efficiency of the workers w/o added planning time or the time spent on final steps, like partition registration. `#27691 <https://github.com/prestodb/presto/pull/27691>`_
+* Fix query statistics so that 'planningTime' and 'finishingTime' are no longer added to 'executionTime'. 'executionTime' is now the true execution time — how long it took the query to run the compute. It can be used to measure the efficiency of the workers without added planning time or the time spent on final steps, such as partition registration. `#27691 <https://github.com/prestodb/presto/pull/27691>`_
 * Fix RPC options argument parsing to use the last argument instead of hardcoding index 3. `#27700 <https://github.com/prestodb/presto/pull/27700>`_
 * Fix UnsupportedOperationException when using `remote_function_names_for_fixed_parallelism` with queries containing UNION ALL below the remote function projection. `#27714 <https://github.com/prestodb/presto/pull/27714>`_
 * Fix a bug in PushProjectionThroughCrossJoin optimizer rule where cascading projections above a cross join could cause validation errors by dropping pushed variables from intermediate residual projects. `#27568 <https://github.com/prestodb/presto/pull/27568>`_
@@ -44,7 +44,7 @@ _______________
 * Add support for `ALTER TABLE ... ALTER COLUMN ... SET DEFAULT` syntax to update Iceberg column write-default values. `#27810 <https://github.com/prestodb/presto/pull/27810>`_
 * Add support for ``GROUP BY`` and ``ORDER BY`` ordinal references in materialized view query rewriting. Previously, queries like ``SELECT a, SUM(b) FROM t GROUP BY 1`` would silently skip materialized view optimization. `#27422 <https://github.com/prestodb/presto/pull/27422>`_
 * Add support for scalar functions in materialized view query rewriting. Queries using functions like ``CONCAT``, ``ABS``, ``JSON_EXTRACT``, ``CAST``, ``IF``, ``COALESCE``, and ``CASE`` expressions now correctly rewrite to scan the materialized view. `#27549 <https://github.com/prestodb/presto/pull/27549>`_
-* Adding presto-flight-shim server module for connector federation. `#26369 <https://github.com/prestodb/presto/pull/26369>`_
+* Add presto-flight-shim server module for connector federation. `#26369 <https://github.com/prestodb/presto/pull/26369>`_
 * Remove configuration property `use-new-nan-definition`. `#27829 <https://github.com/prestodb/presto/pull/27829>`_
 * Allow HAVING in queries that are transparently rewritten onto a materialized view. `#27677 <https://github.com/prestodb/presto/pull/27677>`_
 * Optimize `map_from_entries(ARRAY[ROW(...), ...])` by rewriting to `MAP(ARRAY[keys], ARRAY[values])` at plan time, avoiding intermediate ROW construction. `#27491 <https://github.com/prestodb/presto/pull/27491>`_
@@ -95,7 +95,7 @@ _________________________
 * Add ``iceberg.materialized-view-default-storage-schema`` config to route storage tables into a single schema. Defaults to the materialized view's own schema; per-MV ``storage_schema`` overrides. `#27728 <https://github.com/prestodb/presto/pull/27728>`_
 * Add ``max_snapshots_per_refresh`` materialized view property to bound how far each base table advances per ``REFRESH MATERIALIZED VIEW``. Defaults to ``0`` (unbounded). Requires Iceberg V3 row lineage; V2 tables fall back to unbounded refresh. `#27774 <https://github.com/prestodb/presto/pull/27774>`_
 * Add `materialized_view_stitching_strategy` and `materialized_view_incremental_refresh_strategy` session properties (values: `ALWAYS`, `NEVER`, `AUTOMATIC`; default: `ALWAYS`). Under `AUTOMATIC`, the optimizer selects between the rewrite and the full alternative based on cost; when stats are unavailable it falls back to row-count comparison. `#27820 <https://github.com/prestodb/presto/pull/27820>`_
-* Add changes for passing iceberg V3 initialDefaultValue while read. `#27659 <https://github.com/prestodb/presto/pull/27659>`_
+* Add changes for passing Iceberg V3 initial default values when reading. `#27659 <https://github.com/prestodb/presto/pull/27659>`_
 * Add incremental refresh for materialized views in the Iceberg connector. `#26959 <https://github.com/prestodb/presto/pull/26959>`_
 * Add low and high values for varchar/char columns of Iceberg tables. `#27357 <https://github.com/prestodb/presto/pull/27357>`_
 * Add metastore cache invalidation procedure for Iceberg connector. `#27200 <https://github.com/prestodb/presto/pull/27200>`_
