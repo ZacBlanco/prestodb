@@ -31,7 +31,7 @@ _______________
 * Improve query planning performance for wide-column projections by adding fast paths that skip unnecessary processing for variable references, constants, and identity assignments across multiple optimizer rules. `#27547 <https://github.com/prestodb/presto/pull/27547>`_
 * Improve queries to allow ``HAVING`` in queries that are transparently rewritten onto a materialized view. `#27677 <https://github.com/prestodb/presto/pull/27677>`_
 * Add N <= 1000 limit guard to `PrefilterForLimitingAggregation` to restrict the optimization to small limits. `#27678 <https://github.com/prestodb/presto/pull/27678>`_
-* Add ``ALTER MATERIALIZED VIEW <name> SET PROPERTIES (...)`` SQL statement to update materialized view properties after creation. :pr:`27806`. `#27806 <https://github.com/prestodb/presto/pull/27806>`_
+* Add ``ALTER MATERIALIZED VIEW <name> SET PROPERTIES (...)`` SQL statement to update materialized view properties after creation. `#27806 <https://github.com/prestodb/presto/pull/27806>`_
 * Add :ref:`admin/properties-session:\`\`push_aggregation_through_disjoint_union\`\`` session property (default off) that pushes a ``GROUP BY`` aggregation completely below ``UNION ALL`` when at least one grouping key has constant values that are pairwise distinct across the union branches, eliminating the final aggregation. `#27764 <https://github.com/prestodb/presto/pull/27764>`_
 * Add ``rpc_dispatch_batch_size`` session property to control batch size for RPC dispatch in ``BATCH`` mode. Default: ``128``. A value of ``0`` collects all rows before dispatching. `#27700 <https://github.com/prestodb/presto/pull/27700>`_
 * Add ``rpc_streaming_mode`` session property to control RPC function execution mode (``PER_ROW`` or ``BATCH``). Default: ``PER_ROW``. `#27700 <https://github.com/prestodb/presto/pull/27700>`_
@@ -58,7 +58,7 @@ ______________________________________
 Security Changes
 ________________
 * Add optional authorizedPrincipal to AuthorizedIdentity to support gateway identity propagation, allowing the session principal to reflect the original client instead of the gateway. `#27639 <https://github.com/prestodb/presto/pull/27639>`_
-* Upgrade Netty to 4.2.13.Final in response to `CVE-2026-41417  <https://github.com/advisories/GHSA-fghv-69vj-qj49>` , `CVE-2026-44248  <https://github.com/advisories/GHSA-jfg9-48mv-9qgx>` , `CVE-2026-42577  <https://github.com/advisories/GHSA-rwm7-x88c-3g2p>` , `CVE-2026-42578  <https://github.com/advisories/GHSA-45q3-82m4-75jr>` , `CVE-2026-42579  <https://github.com/advisories/GHSA-cm33-6792-r9fm>` , `CVE-2026-42580  <https://github.com/advisories/GHSA-m4cv-j2px-7723>`, `CVE-2026-42581  <https://github.com/advisories/GHSA-xxqh-mfjm-7mv9>` , `CVE-2026-42582  <https://github.com/advisories/GHSA-2c5c-chwr-9hqw>` , `CVE-2026-42583  <https://github.com/advisories/GHSA-mj4r-2hfc-f8p6>` , `CVE-2026-42584  <https://github.com/advisories/GHSA-57rv-r2g8-2cj3>` , `CVE-2026-42585  <https://github.com/advisories/GHSA-38f8-5428-x5cv>` , `CVE-2026-42586  <https://github.com/advisories/GHSA-rgrr-p7gp-5xj7>` and `CVE-2026-42587  <https://github.com/advisories/GHSA-f6hv-jmp6-3vwv>`_. `#27769 <https://github.com/prestodb/presto/pull/27769>`_
+* Upgrade Netty to 4.2.13.Final in response to `CVE-2026-41417  <https://github.com/advisories/GHSA-fghv-69vj-qj49>`_, `CVE-2026-44248  <https://github.com/advisories/GHSA-jfg9-48mv-9qgx>`_, `CVE-2026-42577  <https://github.com/advisories/GHSA-rwm7-x88c-3g2p>`_, `CVE-2026-42578  <https://github.com/advisories/GHSA-45q3-82m4-75jr>`_, `CVE-2026-42579  <https://github.com/advisories/GHSA-cm33-6792-r9fm>`_, `CVE-2026-42580  <https://github.com/advisories/GHSA-m4cv-j2px-7723>`_, `CVE-2026-42581  <https://github.com/advisories/GHSA-xxqh-mfjm-7mv9>`_, `CVE-2026-42582  <https://github.com/advisories/GHSA-2c5c-chwr-9hqw>`_, `CVE-2026-42583  <https://github.com/advisories/GHSA-mj4r-2hfc-f8p6>`_, `CVE-2026-42584  <https://github.com/advisories/GHSA-57rv-r2g8-2cj3>`_, `CVE-2026-42585  <https://github.com/advisories/GHSA-38f8-5428-x5cv>`_, `CVE-2026-42586  <https://github.com/advisories/GHSA-rgrr-p7gp-5xj7>`_, and `CVE-2026-42587  <https://github.com/advisories/GHSA-f6hv-jmp6-3vwv>`_. `#27769 <https://github.com/prestodb/presto/pull/27769>`_
 * Upgrade async-http-client to version 3.0.9 to address `CVE-2026-40490 <https://github.com/advisories/GHSA-cmxv-58fp-fm3g>`_. `#27613 <https://github.com/prestodb/presto/pull/27613>`_
 * Upgrade google-oauth-client version to 1.34.1 to address `CVE-2020-7692 <https://github.com/advisories/GHSA-f263-c949-w85g>`_ and `CVE-2021-22573 <https://github.com/advisories/GHSA-hw42-3568-wj87>`_. `#25424 <https://github.com/prestodb/presto/pull/25424>`_
 * Upgrade http-proxy-middleware from 2.0.7 to 2.0.9  in /presto-ui/src to resolve `CVE-2025-32996 <https://nvd.nist.gov/vuln/detail/CVE-2025-32996>`_. `#27715 <https://github.com/prestodb/presto/pull/27715>`_
@@ -75,12 +75,12 @@ ________________
 
 JDBC Driver Changes
 ___________________
-* Add connection validation feature to enhance connection reliability. This can be enabled with the ``validateConnection`` connection property to execute a validation query immediately after establishing the connection. `#27002 <https://github.com/prestodb/presto/pull/27002>`_
+* Add connection validation feature to enhance connection reliability. This can be enabled with the :ref:`admin/properties-session:\`\`validateConnection\`\`` session property to execute a validation query immediately after establishing the connection. `#27002 <https://github.com/prestodb/presto/pull/27002>`_
 * Add support for `execute` procedure in JDBC connectors. `#27282 <https://github.com/prestodb/presto/pull/27282>`_
 
 Delta Lake Connector Changes
 ____________________________
-* Fix a bug that made the metastore inconsistent if created a Delta Lake table to an inaccessible location. `#27129 <https://github.com/prestodb/presto/pull/27129>`_
+* Fix a bug that made the metastore inconsistent if a Delta Lake table was created  to an inaccessible location. `#27129 <https://github.com/prestodb/presto/pull/27129>`_
 * Add support for reading Delta Lake tables with column mapping enabled. `#27483 <https://github.com/prestodb/presto/pull/27483>`_
 
 Hive Connector Changes
@@ -92,7 +92,7 @@ Iceberg Connector Changes
 _________________________
 * Fix access control for materialized view storage tables when ``legacy_materialized_views=false``: storage-table access control is bypassed during MV expansion, while direct queries by name still go through access control. `#27728 <https://github.com/prestodb/presto/pull/27728>`_
 * Fix failure during ``INSERT`` into Iceberg tables partitioned by day() when using timestamp with time zone columns. `#27645 <https://github.com/prestodb/presto/pull/27645>`_
-* Improve updating of ``stale_read_behavior``, ``staleness_window``, and ``refresh_type`` on existing materialized views with ``ALTER MATERIALIZED VIEW ... SET PROPERTIES`` (requires ``legacy_materialized_views=false``). :pr:`27806`. `#27806 <https://github.com/prestodb/presto/pull/27806>`_
+* Improve updating of ``stale_read_behavior``, ``staleness_window``, and ``refresh_type`` on existing materialized views with ``ALTER MATERIALIZED VIEW ... SET PROPERTIES`` (requires ``legacy_materialized_views=false``). `#27806 <https://github.com/prestodb/presto/pull/27806>`_
 * Add ``iceberg.materialized-view-default-max-snapshots-per-refresh`` config property and matching session property to set the default bound. `#27774 <https://github.com/prestodb/presto/pull/27774>`_
 * Add ``iceberg.materialized-view-default-storage-schema`` config to route storage tables into a single schema. Defaults to the materialized view's own schema; per-MV ``storage_schema`` overrides. `#27728 <https://github.com/prestodb/presto/pull/27728>`_
 * Add ``max_snapshots_per_refresh`` materialized view property to bound how far each base table advances per ``REFRESH MATERIALIZED VIEW``. Defaults to ``0`` (unbounded). Requires Iceberg V3 row lineage; V2 tables fall back to unbounded refresh. `#27774 <https://github.com/prestodb/presto/pull/27774>`_
