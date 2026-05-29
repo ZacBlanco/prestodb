@@ -74,6 +74,7 @@ import com.facebook.presto.metadata.TableHandleJacksonModule;
 import com.facebook.presto.metadata.TableLayoutHandleJacksonModule;
 import com.facebook.presto.metadata.TransactionHandleJacksonModule;
 import com.facebook.presto.server.InternalCommunicationConfig;
+import com.facebook.presto.server.ServerConfig;
 import com.facebook.presto.server.TaskUpdateRequest;
 import com.facebook.presto.server.thrift.ConnectorSplitThriftCodec;
 import com.facebook.presto.server.thrift.DeleteTableHandleThriftCodec;
@@ -775,6 +776,8 @@ public class TestHttpRemoteTaskConnectorCodec
                                 planFragmentSmileCodec,
                                 new RemoteTaskStats(),
                                 internalCommunicationConfig,
+                                new ServerConfig(),
+                                OBJECT_MAPPER,
                                 createTestMetadataManager(),
                                 new TestQueryManager(),
                                 new HandleResolver());

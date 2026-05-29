@@ -214,6 +214,7 @@ public class CoordinatorModule
 
         // query manager
         jaxrsBinder(binder).bind(QueryResource.class);
+        jaxrsBinder(binder).bind(QueryResourceV2.class);
         jaxrsBinder(binder).bind(StageResource.class);
         jaxrsBinder(binder).bind(QueryStateInfoResource.class);
         jaxrsBinder(binder).bind(ResourceGroupStateInfoResource.class);

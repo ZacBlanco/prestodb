@@ -53,6 +53,7 @@ import com.facebook.presto.metadata.HandleResolver;
 import com.facebook.presto.metadata.MetadataManager;
 import com.facebook.presto.metadata.Split;
 import com.facebook.presto.operator.TaskStats;
+import com.facebook.presto.protocol.v2.adapter.TaskUpdateRequestAdapter;
 import com.facebook.presto.server.RequestErrorTracker;
 import com.facebook.presto.server.SimpleHttpResponseCallback;
 import com.facebook.presto.server.SimpleHttpResponseHandler;
@@ -64,6 +65,7 @@ import com.facebook.presto.spi.SplitWeight;
 import com.facebook.presto.spi.plan.PlanNode;
 import com.facebook.presto.spi.plan.PlanNodeId;
 import com.facebook.presto.sql.planner.PlanFragment;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Ticker;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.ImmutableList;
@@ -104,6 +106,7 @@ import static com.facebook.airlift.http.client.Request.Builder.prepareDelete;
 import static com.facebook.airlift.http.client.Request.Builder.preparePost;
 import static com.facebook.airlift.http.client.StaticBodyGenerator.createStaticBodyGenerator;
 import static com.facebook.airlift.http.client.StatusResponseHandler.createStatusResponseHandler;
+import static com.facebook.presto.PrestoMediaTypes.APPLICATION_PRESTO_PROTOBUF;
 import static com.facebook.presto.SystemSessionProperties.getMaxUnacknowledgedSplitsPerTask;
 import static com.facebook.presto.execution.TaskInfo.createInitialTask;
 import static com.facebook.presto.execution.TaskState.ABORTED;
@@ -127,9 +130,11 @@ import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.base.Verify.verify;
 import static com.google.common.collect.ImmutableList.toImmutableList;
 import static com.google.common.collect.ImmutableSet.toImmutableSet;
+import static com.google.common.net.HttpHeaders.ACCEPT;
 import static com.google.common.util.concurrent.Futures.addCallback;
 import static com.google.common.util.concurrent.Futures.immediateFuture;
 import static com.google.common.util.concurrent.MoreExecutors.directExecutor;
+import static jakarta.ws.rs.core.HttpHeaders.CONTENT_TYPE;
 import static java.lang.Math.addExact;
 import static java.lang.String.format;
 import static java.lang.System.currentTimeMillis;
@@ -232,6 +237,8 @@ public final class HttpRemoteTaskWithEventLoop
     private final DecayCounter taskUpdateRequestSize;
     private final boolean taskUpdateSizeTrackingEnabled;
     private final SchedulerStatsTracker schedulerStatsTracker;
+    private final boolean protocolV2Enabled;
+    private final TaskUpdateRequestAdapter taskUpdateRequestAdapter;
 
     private final SafeEventLoopGroup.SafeEventLoop taskEventLoop;
     private final String loggingPrefix;
@@ -274,6 +281,8 @@ public final class HttpRemoteTaskWithEventLoop
             QueryManager queryManager,
             DecayCounter taskUpdateRequestSize,
             boolean taskUpdateSizeTrackingEnabled,
+            boolean protocolV2Enabled,
+            ObjectMapper objectMapper,
             HandleResolver handleResolver,
             SchedulerStatsTracker schedulerStatsTracker,
             SafeEventLoopGroup.SafeEventLoop taskEventLoop)
@@ -312,6 +321,8 @@ public final class HttpRemoteTaskWithEventLoop
                 queryManager,
                 taskUpdateRequestSize,
                 taskUpdateSizeTrackingEnabled,
+                protocolV2Enabled,
+                objectMapper,
                 handleResolver,
                 schedulerStatsTracker,
                 taskEventLoop);
@@ -353,6 +364,8 @@ public final class HttpRemoteTaskWithEventLoop
             QueryManager queryManager,
             DecayCounter taskUpdateRequestSize,
             boolean taskUpdateSizeTrackingEnabled,
+            boolean protocolV2Enabled,
+            ObjectMapper objectMapper,
             HandleResolver handleResolver,
             SchedulerStatsTracker schedulerStatsTracker,
             SafeEventLoopGroup.SafeEventLoop taskEventLoop)
@@ -380,6 +393,7 @@ public final class HttpRemoteTaskWithEventLoop
         requireNonNull(handleResolver, "handleResolver is null");
         requireNonNull(taskUpdateRequestSize, "taskUpdateRequestSize cannot be null");
         requireNonNull(schedulerStatsTracker, "schedulerStatsTracker is null");
+        requireNonNull(objectMapper, "objectMapper is null");
         requireNonNull(taskEventLoop, "taskEventLoop is null");
 
         this.taskEventLoop = taskEventLoop;
@@ -421,6 +435,8 @@ public final class HttpRemoteTaskWithEventLoop
         this.taskUpdateRequestSize = taskUpdateRequestSize;
         this.taskUpdateSizeTrackingEnabled = taskUpdateSizeTrackingEnabled;
         this.schedulerStatsTracker = schedulerStatsTracker;
+        this.protocolV2Enabled = protocolV2Enabled;
+        this.taskUpdateRequestAdapter = new TaskUpdateRequestAdapter(objectMapper);
 
         for (Entry<PlanNodeId, Split> entry : requireNonNull(initialSplits, "initialSplits is null").entries()) {
             ScheduledSplit scheduledSplit = new ScheduledSplit(nextSplitId++, entry.getKey(), entry.getValue());
@@ -457,6 +473,7 @@ public final class HttpRemoteTaskWithEventLoop
                 stats,
                 binaryTransportEnabled,
                 thriftTransportEnabled,
+                protocolV2Enabled,
                 thriftProtocol);
 
         this.taskInfoFetcher = new TaskInfoFetcherWithEventLoop(
@@ -476,6 +493,8 @@ public final class HttpRemoteTaskWithEventLoop
                 metadataManager,
                 queryManager,
                 handleResolver,
+                protocolV2Enabled,
+                objectMapper,
                 thriftProtocol);
         this.loggingPrefix = format("Query: %s, Task: %s", session.getQueryId(), taskId);
     }
@@ -1019,7 +1038,7 @@ public final class HttpRemoteTaskWithEventLoop
             Request.Builder requestBuilder;
             HttpUriBuilder uriBuilder = getHttpUriBuilder(taskStatus);
 
-            byte[] taskUpdateRequestBytes = taskUpdateRequestCodec.toBytes(updateRequest);
+            byte[] taskUpdateRequestBytes = serializeTaskUpdateRequest(updateRequest);
             schedulerStatsTracker.recordTaskUpdateSerializedCpuTime(THREAD_MX_BEAN.getCurrentThreadCpuTime() - serializeStartCpuTimeNanos);
 
             if (taskUpdateRequestBytes.length > maxTaskUpdateSizeInBytes) {
@@ -1040,15 +1059,17 @@ public final class HttpRemoteTaskWithEventLoop
                 }
             }
 
-            requestBuilder = setTaskUpdateRequestContentTypeHeaders(taskUpdateRequestThriftSerdeEnabled, binaryTransportEnabled, preparePost());
-            requestBuilder = setTaskInfoAcceptTypeHeaders(taskInfoResponseThriftSerdeEnabled, binaryTransportEnabled, requestBuilder);
+            requestBuilder = prepareTaskUpdateRequest();
             Request request = requestBuilder
-                    .setUri(uriBuilder.build())
+                    .setUri(getTaskUpdateRequestUri(uriBuilder))
                     .setBodyGenerator(createStaticBodyGenerator(taskUpdateRequestBytes))
                     .build();
 
             ResponseHandler responseHandler;
-            if (taskInfoResponseThriftSerdeEnabled) {
+            if (protocolV2Enabled) {
+                responseHandler = createStatusResponseHandler();
+            }
+            else if (taskInfoResponseThriftSerdeEnabled) {
                 responseHandler = new ThriftResponseHandler(unwrapThriftCodec(taskInfoResponseCodec));
             }
             else if (binaryTransportEnabled) {
@@ -1071,7 +1092,13 @@ public final class HttpRemoteTaskWithEventLoop
             // and does so without grabbing the instance lock.
             needsUpdate = false;
 
-            if (taskInfoResponseThriftSerdeEnabled) {
+            if (protocolV2Enabled) {
+                Futures.addCallback(
+                        (ListenableFuture<StatusResponse>) future,
+                        new StatusResponseHandler(new UpdateResponseHandler(sources), request.getUri()),
+                        taskEventLoop);
+            }
+            else if (taskInfoResponseThriftSerdeEnabled) {
                 Futures.addCallback(
                         (ListenableFuture<ThriftResponse<TaskInfo>>) future,
                         new ThriftHttpResponseHandler<>(new UpdateResponseHandler(sources), request.getUri(), stats.getHttpResponseStats(), REMOTE_TASK_ERROR),
@@ -1090,6 +1117,34 @@ public final class HttpRemoteTaskWithEventLoop
     {
         DataSize taskUpdateSize = DataSize.succinctBytes(taskUpdateRequestJson.length);
         return format("TaskUpdate size of %s has exceeded the limit of %s", taskUpdateSize.toString(), this.maxTaskUpdateDataSize.toString());
+    }
+
+    private byte[] serializeTaskUpdateRequest(TaskUpdateRequest updateRequest)
+    {
+        if (protocolV2Enabled) {
+            return taskUpdateRequestAdapter.toProtocol(updateRequest).toByteArray();
+        }
+        return taskUpdateRequestCodec.toBytes(updateRequest);
+    }
+
+    private Request.Builder prepareTaskUpdateRequest()
+    {
+        if (protocolV2Enabled) {
+            return preparePost()
+                    .setHeader(CONTENT_TYPE, APPLICATION_PRESTO_PROTOBUF)
+                    .setHeader(ACCEPT, APPLICATION_PRESTO_PROTOBUF);
+        }
+
+        Request.Builder requestBuilder = setTaskUpdateRequestContentTypeHeaders(taskUpdateRequestThriftSerdeEnabled, binaryTransportEnabled, preparePost());
+        return setTaskInfoAcceptTypeHeaders(taskInfoResponseThriftSerdeEnabled, binaryTransportEnabled, requestBuilder);
+    }
+
+    private URI getTaskUpdateRequestUri(HttpUriBuilder uriBuilder)
+    {
+        if (protocolV2Enabled) {
+            return uriBuilder.replacePath("/v2/task/" + taskId).build();
+        }
+        return uriBuilder.build();
     }
 
     private List<TaskSource> getSources()
@@ -1378,6 +1433,50 @@ public final class HttpRemoteTaskWithEventLoop
             Duration requestRoundTrip = Duration.nanosSince(currentRequestStartNanos);
             stats.updateRoundTripMillis(requestRoundTrip.toMillis());
             schedulerStatsTracker.recordRoundTripTime(requestRoundTrip.toMillis() * 1000000);
+        }
+    }
+
+    private class StatusResponseHandler
+            implements FutureCallback<StatusResponse>
+    {
+        private final UpdateResponseHandler callback;
+        private final URI uri;
+
+        private StatusResponseHandler(UpdateResponseHandler callback, URI uri)
+        {
+            this.callback = requireNonNull(callback, "callback is null");
+            this.uri = requireNonNull(uri, "uri is null");
+        }
+
+        @Override
+        public void onSuccess(@Nullable StatusResponse response)
+        {
+            stats.getHttpResponseStats().updateSuccess();
+            try {
+                if (response == null) {
+                    callback.fatal(new PrestoException(REMOTE_TASK_ERROR, format("Expected response from %s is empty", uri)));
+                    return;
+                }
+                if (response.getStatusCode() == NO_CONTENT.code()) {
+                    callback.success(getTaskInfo());
+                    return;
+                }
+                if (response.getStatusCode() == OK.code()) {
+                    callback.success(getTaskInfo());
+                    return;
+                }
+                callback.fatal(new PrestoException(REMOTE_TASK_ERROR, format("Expected response code from %s to be %s, but was %s", uri, NO_CONTENT.code(), response.getStatusCode())));
+            }
+            catch (Throwable t) {
+                callback.fatal(t);
+            }
+        }
+
+        @Override
+        public void onFailure(Throwable t)
+        {
+            stats.getHttpResponseStats().updateFailure();
+            callback.failed(t);
         }
     }
 

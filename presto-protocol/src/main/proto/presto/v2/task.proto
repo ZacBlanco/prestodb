@@ -69,3 +69,163 @@ message TableWriteInfo {
   optional ConnectorPayload writer_target = 1;
   optional ConnectorPayload analyze_table_handle = 2;
 }
+
+message TaskStatus {
+  int64 task_instance_id_least_significant_bits = 1;
+  int64 task_instance_id_most_significant_bits = 2;
+  int64 version = 3;
+  TaskState state = 4;
+  string self = 5;
+  repeated Lifespan completed_driver_groups = 6;
+  repeated ExecutionFailureInfo failures = 7;
+  int32 queued_partitioned_drivers = 8;
+  int32 running_partitioned_drivers = 9;
+  double output_buffer_utilization = 10;
+  bool output_buffer_overutilized = 11;
+  int64 physical_written_data_size_in_bytes = 12;
+  int64 memory_reservation_in_bytes = 13;
+  int64 system_memory_reservation_in_bytes = 14;
+  int64 full_gc_count = 15;
+  int64 full_gc_time_in_millis = 16;
+  int64 peak_node_total_memory_reservation_in_bytes = 17;
+  int64 total_cpu_time_in_nanos = 18;
+  int64 task_age_in_millis = 19;
+  int64 queued_partitioned_splits_weight = 20;
+  int64 running_partitioned_splits_weight = 21;
+}
+
+enum TaskState {
+  TASK_STATE_UNKNOWN = 0;
+  TASK_STATE_PLANNED = 1;
+  TASK_STATE_RUNNING = 2;
+  TASK_STATE_FINISHED = 3;
+  TASK_STATE_CANCELED = 4;
+  TASK_STATE_ABORTED = 5;
+  TASK_STATE_FAILED = 6;
+}
+
+message ExecutionFailureInfo {
+  string type = 1;
+  optional string message = 2;
+  optional ExecutionFailureInfo cause = 3;
+  repeated ExecutionFailureInfo suppressed = 4;
+  repeated string stack = 5;
+  optional ErrorLocation error_location = 6;
+  optional ErrorCode error_code = 7;
+  optional string remote_host = 8;
+  optional string error_cause = 9;
+}
+
+message ErrorLocation {
+  int32 line_number = 1;
+  int32 column_number = 2;
+}
+
+message ErrorCode {
+  int32 code = 1;
+  string name = 2;
+  string type = 3;
+  bool retriable = 4;
+  bool catchable_by_try = 5;
+}
+
+message TaskInfo {
+  string task_id = 1;
+  TaskStatus task_status = 2;
+  int64 last_heartbeat_in_millis = 3;
+  OutputBufferInfo output_buffers = 4;
+  repeated string no_more_splits = 5;
+  TaskStats stats = 6;
+  bool needs_plan = 7;
+  string node_id = 8;
+}
+
+message OutputBufferInfo {
+  string type = 1;
+  BufferState state = 2;
+  repeated BufferInfo buffers = 3;
+  bool can_add_buffers = 4;
+  bool can_add_pages = 5;
+  int64 total_buffered_bytes = 6;
+  int64 total_buffered_pages = 7;
+  int64 total_rows_sent = 8;
+  int64 total_pages_sent = 9;
+}
+
+enum BufferState {
+  BUFFER_STATE_UNKNOWN = 0;
+  BUFFER_STATE_OPEN = 1;
+  BUFFER_STATE_NO_MORE_BUFFERS = 2;
+  BUFFER_STATE_NO_MORE_PAGES = 3;
+  BUFFER_STATE_FLUSHING = 4;
+  BUFFER_STATE_FINISHED = 5;
+  BUFFER_STATE_FAILED = 6;
+}
+
+message BufferInfo {
+  int32 buffer_id = 1;
+  bool finished = 2;
+  int32 buffered_pages = 3;
+  int64 pages_sent = 4;
+  PageBufferInfo page_buffer_info = 5;
+}
+
+message PageBufferInfo {
+  int32 partition = 1;
+  int64 buffered_pages = 2;
+  int64 buffered_bytes = 3;
+  int64 rows_added = 4;
+  int64 pages_added = 5;
+}
+
+message TaskStats {
+  int64 create_time_in_millis = 1;
+  int64 first_start_time_in_millis = 2;
+  int64 last_start_time_in_millis = 3;
+  int64 last_end_time_in_millis = 4;
+  int64 end_time_in_millis = 5;
+  int64 elapsed_time_in_nanos = 6;
+  int64 queued_time_in_nanos = 7;
+  int32 total_drivers = 8;
+  int32 queued_drivers = 9;
+  int32 running_drivers = 10;
+  int32 blocked_drivers = 11;
+  int32 completed_drivers = 12;
+  double cumulative_user_memory = 13;
+  double cumulative_total_memory = 14;
+  int64 user_memory_reservation_in_bytes = 15;
+  int64 revocable_memory_reservation_in_bytes = 16;
+  int64 system_memory_reservation_in_bytes = 17;
+  int64 peak_user_memory_in_bytes = 18;
+  int64 peak_total_memory_in_bytes = 19;
+  int64 peak_node_total_memory_in_bytes = 20;
+  int64 total_scheduled_time_in_nanos = 21;
+  int64 total_cpu_time_in_nanos = 22;
+  int64 total_blocked_time_in_nanos = 23;
+  bool fully_blocked = 24;
+  repeated string blocked_reasons = 25;
+  int64 total_allocation_in_bytes = 26;
+  int64 raw_input_data_size_in_bytes = 27;
+  int64 raw_input_positions = 28;
+  int64 processed_input_data_size_in_bytes = 29;
+  int64 processed_input_positions = 30;
+  int64 output_data_size_in_bytes = 31;
+  int64 output_positions = 32;
+  int64 physical_written_data_size_in_bytes = 33;
+  repeated ConnectorPayload pipelines = 34;
+  int32 queued_partitioned_drivers = 35;
+  int64 queued_partitioned_splits_weight = 36;
+  int32 running_partitioned_drivers = 37;
+  int64 running_partitioned_splits_weight = 38;
+  int32 full_gc_count = 39;
+  int64 full_gc_time_in_millis = 40;
+  optional ConnectorPayload runtime_stats = 41;
+  int32 total_splits = 42;
+  int32 queued_splits = 43;
+  int32 running_splits = 44;
+  int32 completed_splits = 45;
+  int32 total_new_drivers = 46;
+  int32 queued_new_drivers = 47;
+  int32 running_new_drivers = 48;
+  int32 completed_new_drivers = 49;
+}

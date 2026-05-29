@@ -19,6 +19,7 @@ import com.facebook.airlift.units.DataSize;
 import com.facebook.airlift.units.Duration;
 import com.facebook.presto.client.QueryResults;
 import com.facebook.presto.execution.QueryManager;
+import com.facebook.presto.protocol.v2.adapter.QueryResultsAdapter;
 import com.facebook.presto.server.ForStatementResource;
 import com.facebook.presto.server.ServerConfig;
 import com.facebook.presto.spi.QueryId;
@@ -30,6 +31,7 @@ import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.HeaderParam;
+import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
@@ -45,8 +47,10 @@ import org.weakref.jmx.Nested;
 
 import static com.facebook.airlift.http.server.AsyncResponseHandler.bindAsyncResponse;
 import static com.facebook.airlift.units.DataSize.Unit.MEGABYTE;
+import static com.facebook.presto.PrestoMediaTypes.APPLICATION_PRESTO_PROTOBUF;
 import static com.facebook.presto.client.PrestoHeaders.PRESTO_PREFIX_URL;
 import static com.facebook.presto.server.protocol.QueryResourceUtil.abortIfPrefixUrlInvalid;
+import static com.facebook.presto.server.protocol.QueryResourceUtil.toProtocolResponse;
 import static com.facebook.presto.server.protocol.QueryResourceUtil.toResponse;
 import static com.facebook.presto.server.security.RoleType.USER;
 import static com.google.common.base.Strings.isNullOrEmpty;
@@ -72,6 +76,8 @@ public class ExecutingStatementResource
     private final boolean compressionEnabled;
     private final boolean nestedDataSerializationEnabled;
     private final QueryBlockingRateLimiter queryRateLimiter;
+    private final boolean protocolV2Enabled;
+    private final QueryResultsAdapter queryResultsAdapter = new QueryResultsAdapter();
 
     @Inject
     public ExecutingStatementResource(
@@ -85,7 +91,8 @@ public class ExecutingStatementResource
         this.queryProvider = requireNonNull(queryProvider, "queryProvider is null");
         this.queryManager = requireNonNull(queryManager, "queryManager is null");
         this.compressionEnabled = requireNonNull(serverConfig, "serverConfig is null").isQueryResultsCompressionEnabled();
-        this.nestedDataSerializationEnabled = requireNonNull(serverConfig, "serverConfig is null").isNestedDataSerializationEnabled();
+        this.nestedDataSerializationEnabled = serverConfig.isNestedDataSerializationEnabled();
+        this.protocolV2Enabled = serverConfig.isProtocolV2Enabled();
         this.queryRateLimiter = requireNonNull(queryRateLimiter, "queryRateLimiter is null");
     }
 
@@ -94,6 +101,25 @@ public class ExecutingStatementResource
     public TimeStat getRateLimiterBlockTime()
     {
         return queryRateLimiter.getRateLimiterBlockTime();
+    }
+
+    @GET
+    @Path("/v2/statement/executing/{queryId}/{token}")
+    @Produces(APPLICATION_PRESTO_PROTOBUF)
+    public void getQueryResultsV2(
+            @PathParam("queryId") QueryId queryId,
+            @PathParam("token") long token,
+            @QueryParam("slug") String slug,
+            @QueryParam("maxWait") Duration maxWait,
+            @QueryParam("targetResultSize") DataSize targetResultSize,
+            @DefaultValue("false") @QueryParam("binaryResults") boolean binaryResults,
+            @HeaderParam(X_FORWARDED_PROTO) String proto,
+            @HeaderParam(PRESTO_PREFIX_URL) String xPrestoPrefixUrl,
+            @Context UriInfo uriInfo,
+            @Suspended AsyncResponse asyncResponse)
+    {
+        checkProtocolV2Enabled();
+        getQueryResultsInternal(queryId, token, slug, maxWait, targetResultSize, binaryResults, proto, xPrestoPrefixUrl, uriInfo, asyncResponse, true);
     }
 
     @GET
@@ -110,6 +136,22 @@ public class ExecutingStatementResource
             @HeaderParam(PRESTO_PREFIX_URL) String xPrestoPrefixUrl,
             @Context UriInfo uriInfo,
             @Suspended AsyncResponse asyncResponse)
+    {
+        getQueryResultsInternal(queryId, token, slug, maxWait, targetResultSize, binaryResults, proto, xPrestoPrefixUrl, uriInfo, asyncResponse, false);
+    }
+
+    private void getQueryResultsInternal(
+            QueryId queryId,
+            long token,
+            String slug,
+            Duration maxWait,
+            DataSize targetResultSize,
+            boolean binaryResults,
+            String proto,
+            String xPrestoPrefixUrl,
+            UriInfo uriInfo,
+            AsyncResponse asyncResponse,
+            boolean protocolV2)
     {
         Duration wait = WAIT_ORDERING.min(MAX_WAIT_TIME, maxWait);
         if (targetResultSize == null) {
@@ -132,15 +174,29 @@ public class ExecutingStatementResource
                 acquirePermitAsync,
                 acquirePermitTimeSeconds -> {
                     queryRateLimiter.addRateLimiterBlockTime(new Duration(acquirePermitTimeSeconds, SECONDS));
-                    return query.waitForResults(token, uriInfo, effectiveFinalProto, wait, effectiveFinalTargetResultSize, binaryResults);
+                    return query.waitForResults(token, uriInfo, effectiveFinalProto, wait, effectiveFinalTargetResultSize, binaryResults, protocolV2 ? "/v2/statement" : "/v1/statement");
                 },
                 responseExecutor);
         long durationUntilExpirationMs = queryManager.getDurationUntilExpirationInMillis(queryId);
         ListenableFuture<Response> queryResultsFuture = transform(
                 waitForResultsAsync,
-                results -> toResponse(query, results, xPrestoPrefixUrl, compressionEnabled, nestedDataSerializationEnabled, durationUntilExpirationMs),
+                results -> protocolV2 ?
+                        toProtocolResponse(query, results, xPrestoPrefixUrl, compressionEnabled, nestedDataSerializationEnabled, durationUntilExpirationMs, queryResultsAdapter) :
+                        toResponse(query, results, xPrestoPrefixUrl, compressionEnabled, nestedDataSerializationEnabled, durationUntilExpirationMs),
                 directExecutor());
         bindAsyncResponse(asyncResponse, queryResultsFuture, responseExecutor);
+    }
+
+    @DELETE
+    @Path("/v2/statement/executing/{queryId}/{token}")
+    @Produces(APPLICATION_PRESTO_PROTOBUF)
+    public Response cancelQueryV2(
+            @PathParam("queryId") QueryId queryId,
+            @PathParam("token") long token,
+            @QueryParam("slug") String slug)
+    {
+        checkProtocolV2Enabled();
+        return cancelQueryInternal(queryId, slug);
     }
 
     @DELETE
@@ -151,7 +207,19 @@ public class ExecutingStatementResource
             @PathParam("token") long token,
             @QueryParam("slug") String slug)
     {
+        return cancelQueryInternal(queryId, slug);
+    }
+
+    private Response cancelQueryInternal(QueryId queryId, String slug)
+    {
         queryProvider.cancel(queryId, slug);
         return Response.noContent().build();
+    }
+
+    private void checkProtocolV2Enabled()
+    {
+        if (!protocolV2Enabled) {
+            throw new NotFoundException();
+        }
     }
 }

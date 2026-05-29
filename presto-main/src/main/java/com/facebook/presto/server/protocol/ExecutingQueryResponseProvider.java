@@ -16,6 +16,7 @@ package com.facebook.presto.server.protocol;
 import com.facebook.airlift.units.DataSize;
 import com.facebook.airlift.units.Duration;
 import com.facebook.presto.dispatcher.DispatchInfo;
+import com.facebook.presto.protocol.v2.adapter.QueryResultsAdapter;
 import com.facebook.presto.spi.QueryId;
 import com.google.common.util.concurrent.ListenableFuture;
 import jakarta.ws.rs.core.Response;
@@ -68,5 +69,7 @@ public interface ExecutingQueryResponseProvider
             long durationUntilExpirationMs,
             Optional<URI> retryUrl,
             OptionalLong retryExpirationEpochTime,
-            boolean isRetryQuery);
+            boolean isRetryQuery,
+            String statementPathPrefix,
+            Optional<QueryResultsAdapter> queryResultsAdapter);
 }

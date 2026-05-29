@@ -26,6 +26,11 @@ message QueryResults {
   repeated Column columns = 4;
   StatementStats stats = 5;
   optional QueryError error = 6;
+  optional string partial_cancel_uri = 7;
+  repeated string binary_data = 8;
+  repeated ClientWarning warnings = 9;
+  optional string update_type = 10;
+  optional int64 update_count = 11;
 }
 
 message Column {
@@ -37,26 +42,55 @@ message StatementStats {
   string state = 1;
   bool queued = 2;
   bool scheduled = 3;
-  repeated StageStats root_stage = 4;
+  optional StageStats root_stage = 4;
+  bool waiting_for_prerequisites = 5;
+  int32 nodes = 6;
+  int32 total_splits = 7;
+  int32 queued_splits = 8;
+  int32 running_splits = 9;
+  int32 completed_splits = 10;
+  int64 cpu_time_millis = 11;
+  int64 wall_time_millis = 12;
+  int64 waiting_for_prerequisites_time_millis = 13;
+  int64 queued_time_millis = 14;
+  int64 elapsed_time_millis = 15;
+  int64 processed_rows = 16;
+  int64 processed_bytes = 17;
+  int64 peak_memory_bytes = 18;
+  int64 peak_total_memory_bytes = 19;
+  int64 peak_task_total_memory_bytes = 20;
+  int64 spilled_bytes = 21;
 }
 
 message StageStats {
   string stage_id = 1;
   string state = 2;
   repeated StageStats sub_stages = 3;
+  bool done = 4;
+  int32 nodes = 5;
+  int32 total_splits = 6;
+  int32 queued_splits = 7;
+  int32 running_splits = 8;
+  int32 completed_splits = 9;
+  int64 cpu_time_millis = 10;
+  int64 wall_time_millis = 11;
+  int64 processed_rows = 12;
+  int64 processed_bytes = 13;
 }
 
 message QueryError {
   string message = 1;
-  string sql_state = 2;
+  optional string sql_state = 2;
   int32 error_code = 3;
-  string error_name = 4;
-  string error_type = 5;
+  optional string error_name = 4;
+  optional string error_type = 5;
+  bool retriable = 6;
 }
 
 message ClientWarning {
-  string warning_code = 1;
-  string message = 2;
+  int32 code = 1;
+  string name = 2;
+  string message = 3;
 }
 
 message TransactionInfo {

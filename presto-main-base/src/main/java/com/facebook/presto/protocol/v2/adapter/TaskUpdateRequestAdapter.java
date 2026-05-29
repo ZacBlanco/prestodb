@@ -14,17 +14,40 @@
 package com.facebook.presto.protocol.v2.adapter;
 
 import com.facebook.presto.server.TaskUpdateRequest;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.protobuf.ByteString;
 
+import java.util.Optional;
+
+import static com.google.common.collect.ImmutableList.toImmutableList;
 import static java.util.Objects.requireNonNull;
 
 public class TaskUpdateRequestAdapter
         implements ProtocolAdapter<TaskUpdateRequest, com.facebook.presto.protocol.v2.TaskUpdateRequest>
 {
-    private final SessionRepresentationAdapter sessionRepresentationAdapter = new SessionRepresentationAdapter();
-    private final TaskSourceAdapter taskSourceAdapter = new TaskSourceAdapter();
-    private final OutputBuffersAdapter outputBuffersAdapter = new OutputBuffersAdapter();
-    private final TableWriteInfoAdapter tableWriteInfoAdapter = new TableWriteInfoAdapter();
+    private final SessionRepresentationAdapter sessionRepresentationAdapter;
+    private final TaskSourceAdapter taskSourceAdapter;
+    private final OutputBuffersAdapter outputBuffersAdapter;
+    private final TableWriteInfoAdapter tableWriteInfoAdapter;
+
+    public TaskUpdateRequestAdapter()
+    {
+        this(new ConnectorPayloadAdapter());
+    }
+
+    public TaskUpdateRequestAdapter(ObjectMapper objectMapper)
+    {
+        this(new ConnectorPayloadAdapter(objectMapper));
+    }
+
+    public TaskUpdateRequestAdapter(ConnectorPayloadAdapter connectorPayloadAdapter)
+    {
+        requireNonNull(connectorPayloadAdapter, "connectorPayloadAdapter is null");
+        this.sessionRepresentationAdapter = new SessionRepresentationAdapter();
+        this.taskSourceAdapter = new TaskSourceAdapter(new ScheduledSplitAdapter(connectorPayloadAdapter), new LifespanAdapter());
+        this.outputBuffersAdapter = new OutputBuffersAdapter();
+        this.tableWriteInfoAdapter = new TableWriteInfoAdapter(connectorPayloadAdapter);
+    }
 
     @Override
     public com.facebook.presto.protocol.v2.TaskUpdateRequest toProtocol(TaskUpdateRequest value)
@@ -48,6 +71,15 @@ public class TaskUpdateRequestAdapter
     @Override
     public TaskUpdateRequest fromProtocol(com.facebook.presto.protocol.v2.TaskUpdateRequest value)
     {
-        throw new UnsupportedOperationException("TaskUpdateRequest proto-to-Java conversion is not implemented yet");
+        requireNonNull(value, "value is null");
+        return new TaskUpdateRequest(
+                sessionRepresentationAdapter.fromProtocol(value.getSession()),
+                value.getExtraCredentialsMap(),
+                value.hasFragment() ? Optional.of(value.getFragment().toByteArray()) : Optional.empty(),
+                value.getSourcesList().stream()
+                        .map(taskSourceAdapter::fromProtocol)
+                        .collect(toImmutableList()),
+                outputBuffersAdapter.fromProtocol(value.getOutputIds()),
+                value.hasTableWriteInfo() ? Optional.of(tableWriteInfoAdapter.fromProtocol(value.getTableWriteInfo())) : Optional.empty());
     }
 }

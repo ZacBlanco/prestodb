@@ -25,6 +25,7 @@ import com.facebook.presto.dispatcher.DispatchInfo;
 import com.facebook.presto.dispatcher.DispatchManager;
 import com.facebook.presto.execution.ExecutionFailureInfo;
 import com.facebook.presto.metadata.SessionPropertyManager;
+import com.facebook.presto.protocol.v2.adapter.QueryResultsAdapter;
 import com.facebook.presto.server.HttpRequestSessionContext;
 import com.facebook.presto.server.RetryUrlValidator;
 import com.facebook.presto.server.ServerConfig;
@@ -45,6 +46,7 @@ import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.HeaderParam;
+import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
@@ -78,6 +80,7 @@ import static com.facebook.airlift.concurrent.MoreFutures.addTimeout;
 import static com.facebook.airlift.concurrent.Threads.threadsNamed;
 import static com.facebook.airlift.http.server.AsyncResponseHandler.bindAsyncResponse;
 import static com.facebook.airlift.units.DataSize.Unit.MEGABYTE;
+import static com.facebook.presto.PrestoMediaTypes.APPLICATION_PRESTO_PROTOBUF;
 import static com.facebook.presto.client.PrestoHeaders.PRESTO_PREFIX_URL;
 import static com.facebook.presto.client.PrestoHeaders.PRESTO_RETRY_QUERY;
 import static com.facebook.presto.server.protocol.QueryResourceUtil.NO_DURATION;
@@ -140,6 +143,8 @@ public class QueuedStatementResource
 
     private final QueryBlockingRateLimiter queryRateLimiter;
     private final RetryUrlValidator retryUrlValidator;
+    private final boolean protocolV2Enabled;
+    private final QueryResultsAdapter queryResultsAdapter = new QueryResultsAdapter();
 
     @Inject
     public QueuedStatementResource(
@@ -158,6 +163,7 @@ public class QueuedStatementResource
         this.sqlParserOptions = requireNonNull(sqlParserOptions, "sqlParserOptions is null");
         this.compressionEnabled = requireNonNull(serverConfig, "serverConfig is null").isQueryResultsCompressionEnabled();
         this.nestedDataSerializationEnabled = requireNonNull(serverConfig, "serverConfig is null").isNestedDataSerializationEnabled();
+        this.protocolV2Enabled = serverConfig.isProtocolV2Enabled();
 
         this.responseExecutor = requireNonNull(executor, "responseExecutor is null").getExecutor();
         this.timeoutExecutor = requireNonNull(executor, "timeoutExecutor is null").getScheduledExecutor();
@@ -181,6 +187,24 @@ public class QueuedStatementResource
                 200,
                 200,
                 MILLISECONDS);
+    }
+
+    @POST
+    @Path("/v2/statement")
+    @Produces(APPLICATION_PRESTO_PROTOBUF)
+    public Response postStatementV2(
+            String statement,
+            @DefaultValue("false") @QueryParam("binaryResults") boolean binaryResults,
+            @QueryParam("retryUrl") String retryUrlString,
+            @QueryParam("retryExpirationInSeconds") Long retryExpirationInSeconds,
+            @HeaderParam(PRESTO_RETRY_QUERY) String isRetryQueryHeader,
+            @HeaderParam(X_FORWARDED_PROTO) String xForwardedProto,
+            @HeaderParam(PRESTO_PREFIX_URL) String xPrestoPrefixUrl,
+            @Context HttpServletRequest servletRequest,
+            @Context UriInfo uriInfo)
+    {
+        checkProtocolV2Enabled();
+        return postStatementInternal(statement, binaryResults, retryUrlString, retryExpirationInSeconds, isRetryQueryHeader, xForwardedProto, xPrestoPrefixUrl, servletRequest, uriInfo, true);
     }
 
     @Managed
@@ -220,6 +244,21 @@ public class QueuedStatementResource
             @HeaderParam(PRESTO_PREFIX_URL) String xPrestoPrefixUrl,
             @Context HttpServletRequest servletRequest,
             @Context UriInfo uriInfo)
+    {
+        return postStatementInternal(statement, binaryResults, retryUrlString, retryExpirationInSeconds, isRetryQueryHeader, xForwardedProto, xPrestoPrefixUrl, servletRequest, uriInfo, false);
+    }
+
+    private Response postStatementInternal(
+            String statement,
+            boolean binaryResults,
+            String retryUrlString,
+            Long retryExpirationInSeconds,
+            String isRetryQueryHeader,
+            String xForwardedProto,
+            String xPrestoPrefixUrl,
+            HttpServletRequest servletRequest,
+            UriInfo uriInfo,
+            boolean protocolV2)
     {
         if (isNullOrEmpty(statement)) {
             throw badRequest(BAD_REQUEST, "SQL statement is empty");
@@ -268,7 +307,13 @@ public class QueuedStatementResource
 
         queries.put(query.getQueryId(), query);
 
-        return withCompressionConfiguration(Response.ok(query.getInitialQueryResults(uriInfo, xForwardedProto, xPrestoPrefixUrl, binaryResults)), compressionEnabled)
+        QueryResults queryResults = query.getInitialQueryResults(uriInfo, xForwardedProto, xPrestoPrefixUrl, binaryResults, protocolV2 ? "/v2/statement" : "/v1/statement");
+        if (protocolV2) {
+            return withCompressionConfiguration(Response.ok(queryResultsAdapter.toProtocol(queryResults)).type(APPLICATION_PRESTO_PROTOBUF), compressionEnabled)
+                    .cacheControl(query.getDefaultCacheControl())
+                    .build();
+        }
+        return withCompressionConfiguration(Response.ok(queryResults), compressionEnabled)
                 .cacheControl(query.getDefaultCacheControl())
                 .build();
     }
@@ -301,6 +346,23 @@ public class QueuedStatementResource
      * @return {@link jakarta.ws.rs.core.Response} HTTP response code
      */
     @PUT
+    @Path("/v2/statement/{queryId}")
+    @Produces(APPLICATION_PRESTO_PROTOBUF)
+    public Response putStatementV2(
+            String statement,
+            @PathParam("queryId") QueryId queryId,
+            @QueryParam("slug") String slug,
+            @DefaultValue("false") @QueryParam("binaryResults") boolean binaryResults,
+            @HeaderParam(X_FORWARDED_PROTO) String xForwardedProto,
+            @HeaderParam(PRESTO_PREFIX_URL) String xPrestoPrefixUrl,
+            @Context HttpServletRequest servletRequest,
+            @Context UriInfo uriInfo)
+    {
+        checkProtocolV2Enabled();
+        return putStatementInternal(statement, queryId, slug, binaryResults, xForwardedProto, xPrestoPrefixUrl, servletRequest, uriInfo, true);
+    }
+
+    @PUT
     @Path("/v1/statement/{queryId}")
     @Produces(APPLICATION_JSON)
     public Response putStatement(
@@ -312,6 +374,20 @@ public class QueuedStatementResource
             @HeaderParam(PRESTO_PREFIX_URL) String xPrestoPrefixUrl,
             @Context HttpServletRequest servletRequest,
             @Context UriInfo uriInfo)
+    {
+        return putStatementInternal(statement, queryId, slug, binaryResults, xForwardedProto, xPrestoPrefixUrl, servletRequest, uriInfo, false);
+    }
+
+    private Response putStatementInternal(
+            String statement,
+            QueryId queryId,
+            String slug,
+            boolean binaryResults,
+            String xForwardedProto,
+            String xPrestoPrefixUrl,
+            HttpServletRequest servletRequest,
+            UriInfo uriInfo,
+            boolean protocolV2)
     {
         if (isNullOrEmpty(statement)) {
             throw badRequest(BAD_REQUEST, "SQL statement is empty");
@@ -334,7 +410,13 @@ public class QueuedStatementResource
             throw badRequest(CONFLICT, "Query already exists");
         }
 
-        return withCompressionConfiguration(Response.ok(query.getInitialQueryResults(uriInfo, xForwardedProto, xPrestoPrefixUrl, binaryResults)), compressionEnabled)
+        QueryResults queryResults = query.getInitialQueryResults(uriInfo, xForwardedProto, xPrestoPrefixUrl, binaryResults, protocolV2 ? "/v2/statement" : "/v1/statement");
+        if (protocolV2) {
+            return withCompressionConfiguration(Response.ok(queryResultsAdapter.toProtocol(queryResults)).type(APPLICATION_PRESTO_PROTOBUF), compressionEnabled)
+                    .cacheControl(query.getDefaultCacheControl())
+                    .build();
+        }
+        return withCompressionConfiguration(Response.ok(queryResults), compressionEnabled)
                 .cacheControl(query.getDefaultCacheControl())
                 .build();
     }
@@ -347,6 +429,20 @@ public class QueuedStatementResource
      * @return {@link jakarta.ws.rs.core.Response} HTTP response code
      */
     @GET
+    @Path("/v2/statement/queued/retry/{queryId}")
+    @Produces(APPLICATION_PRESTO_PROTOBUF)
+    public Response retryFailedQueryV2(
+            @PathParam("queryId") QueryId queryId,
+            @DefaultValue("false") @QueryParam("binaryResults") boolean binaryResults,
+            @HeaderParam(X_FORWARDED_PROTO) String xForwardedProto,
+            @HeaderParam(PRESTO_PREFIX_URL) String xPrestoPrefixUrl,
+            @Context UriInfo uriInfo)
+    {
+        checkProtocolV2Enabled();
+        return retryFailedQueryInternal(queryId, binaryResults, xForwardedProto, xPrestoPrefixUrl, uriInfo, true);
+    }
+
+    @GET
     @Path("/v1/statement/queued/retry/{queryId}")
     @Produces(APPLICATION_JSON)
     public Response retryFailedQuery(
@@ -355,6 +451,17 @@ public class QueuedStatementResource
             @HeaderParam(X_FORWARDED_PROTO) String xForwardedProto,
             @HeaderParam(PRESTO_PREFIX_URL) String xPrestoPrefixUrl,
             @Context UriInfo uriInfo)
+    {
+        return retryFailedQueryInternal(queryId, binaryResults, xForwardedProto, xPrestoPrefixUrl, uriInfo, false);
+    }
+
+    private Response retryFailedQueryInternal(
+            QueryId queryId,
+            boolean binaryResults,
+            String xForwardedProto,
+            String xPrestoPrefixUrl,
+            UriInfo uriInfo,
+            boolean protocolV2)
     {
         abortIfPrefixUrlInvalid(xPrestoPrefixUrl);
 
@@ -396,7 +503,13 @@ public class QueuedStatementResource
             }
         }
 
-        return withCompressionConfiguration(Response.ok(query.getInitialQueryResults(uriInfo, xForwardedProto, xPrestoPrefixUrl, binaryResults)), compressionEnabled)
+        QueryResults queryResults = query.getInitialQueryResults(uriInfo, xForwardedProto, xPrestoPrefixUrl, binaryResults, protocolV2 ? "/v2/statement" : "/v1/statement");
+        if (protocolV2) {
+            return withCompressionConfiguration(Response.ok(queryResultsAdapter.toProtocol(queryResults)).type(APPLICATION_PRESTO_PROTOBUF), compressionEnabled)
+                    .cacheControl(query.getDefaultCacheControl())
+                    .build();
+        }
+        return withCompressionConfiguration(Response.ok(queryResults), compressionEnabled)
                 .cacheControl(query.getDefaultCacheControl())
                 .build();
     }
@@ -412,6 +525,24 @@ public class QueuedStatementResource
      * @param asyncResponse
      */
     @GET
+    @Path("/v2/statement/queued/{queryId}/{token}")
+    @Produces(APPLICATION_PRESTO_PROTOBUF)
+    public void getStatusV2(
+            @PathParam("queryId") QueryId queryId,
+            @PathParam("token") long token,
+            @QueryParam("slug") String slug,
+            @QueryParam("maxWait") Duration maxWait,
+            @DefaultValue("false") @QueryParam("binaryResults") boolean binaryResults,
+            @HeaderParam(X_FORWARDED_PROTO) String xForwardedProto,
+            @HeaderParam(PRESTO_PREFIX_URL) String xPrestoPrefixUrl,
+            @Context UriInfo uriInfo,
+            @Suspended AsyncResponse asyncResponse)
+    {
+        checkProtocolV2Enabled();
+        getStatusInternal(queryId, token, slug, maxWait, binaryResults, xForwardedProto, xPrestoPrefixUrl, uriInfo, asyncResponse, true);
+    }
+
+    @GET
     @Path("/v1/statement/queued/{queryId}/{token}")
     @Produces(APPLICATION_JSON)
     public void getStatus(
@@ -424,6 +555,21 @@ public class QueuedStatementResource
             @HeaderParam(PRESTO_PREFIX_URL) String xPrestoPrefixUrl,
             @Context UriInfo uriInfo,
             @Suspended AsyncResponse asyncResponse)
+    {
+        getStatusInternal(queryId, token, slug, maxWait, binaryResults, xForwardedProto, xPrestoPrefixUrl, uriInfo, asyncResponse, false);
+    }
+
+    private void getStatusInternal(
+            QueryId queryId,
+            long token,
+            String slug,
+            Duration maxWait,
+            boolean binaryResults,
+            String xForwardedProto,
+            String xPrestoPrefixUrl,
+            UriInfo uriInfo,
+            AsyncResponse asyncResponse,
+            boolean protocolV2)
     {
         abortIfPrefixUrlInvalid(xPrestoPrefixUrl);
 
@@ -453,7 +599,7 @@ public class QueuedStatementResource
         // when state changes, fetch the next result
         ListenableFuture<Response> queryResultsFuture = transformAsync(
                 futureStateChange,
-                ignored -> query.toResponse(token, uriInfo, xForwardedProto, xPrestoPrefixUrl, WAIT_ORDERING.min(MAX_WAIT_TIME, maxWait), compressionEnabled, nestedDataSerializationEnabled, binaryResults),
+                ignored -> query.toResponse(token, uriInfo, xForwardedProto, xPrestoPrefixUrl, WAIT_ORDERING.min(MAX_WAIT_TIME, maxWait), compressionEnabled, nestedDataSerializationEnabled, binaryResults, protocolV2 ? "/v2/statement" : "/v1/statement", protocolV2 ? Optional.of(queryResultsAdapter) : Optional.empty()),
                 responseExecutor);
         bindAsyncResponse(asyncResponse, queryResultsFuture, responseExecutor);
     }
@@ -466,12 +612,29 @@ public class QueuedStatementResource
      * @return {@link jakarta.ws.rs.core.Response} HTTP response code
      */
     @DELETE
+    @Path("/v2/statement/queued/{queryId}/{token}")
+    @Produces(APPLICATION_PRESTO_PROTOBUF)
+    public Response cancelQueryV2(
+            @PathParam("queryId") QueryId queryId,
+            @PathParam("token") long token,
+            @QueryParam("slug") String slug)
+    {
+        checkProtocolV2Enabled();
+        return cancelQueryInternal(queryId, slug);
+    }
+
+    @DELETE
     @Path("/v1/statement/queued/{queryId}/{token}")
     @Produces(APPLICATION_JSON)
     public Response cancelQuery(
             @PathParam("queryId") QueryId queryId,
             @PathParam("token") long token,
             @QueryParam("slug") String slug)
+    {
+        return cancelQueryInternal(queryId, slug);
+    }
+
+    private Response cancelQueryInternal(QueryId queryId, String slug)
     {
         getQuery(queryId, slug).cancel();
         return Response.noContent().build();
@@ -520,6 +683,13 @@ public class QueuedStatementResource
     private static String createSlug()
     {
         return "x" + randomUUID().toString().toLowerCase(ENGLISH).replace("-", "");
+    }
+
+    private void checkProtocolV2Enabled()
+    {
+        if (!protocolV2Enabled) {
+            throw new NotFoundException();
+        }
     }
 
     private static final class Query
@@ -682,6 +852,11 @@ public class QueuedStatementResource
          */
         public synchronized QueryResults getInitialQueryResults(UriInfo uriInfo, String xForwardedProto, String xPrestoPrefixUrl, boolean binaryResults)
         {
+            return getInitialQueryResults(uriInfo, xForwardedProto, xPrestoPrefixUrl, binaryResults, "/v1/statement");
+        }
+
+        public synchronized QueryResults getInitialQueryResults(UriInfo uriInfo, String xForwardedProto, String xPrestoPrefixUrl, boolean binaryResults, String statementPathPrefix)
+        {
             verify(lastToken.get() == 0);
             verify(querySubmissionFuture == null);
             return createQueryResults(
@@ -690,7 +865,8 @@ public class QueuedStatementResource
                     xForwardedProto,
                     xPrestoPrefixUrl,
                     DispatchInfo.waitingForPrerequisites(NO_DURATION, NO_DURATION),
-                    binaryResults);
+                    binaryResults,
+                    statementPathPrefix);
         }
 
         public ListenableFuture<Response> toResponse(
@@ -702,6 +878,21 @@ public class QueuedStatementResource
                 boolean compressionEnabled,
                 boolean nestedDataSerializationEnabled,
                 boolean binaryResults)
+        {
+            return toResponse(token, uriInfo, xForwardedProto, xPrestoPrefixUrl, maxWait, compressionEnabled, nestedDataSerializationEnabled, binaryResults, "/v1/statement", Optional.empty());
+        }
+
+        public ListenableFuture<Response> toResponse(
+                long token,
+                UriInfo uriInfo,
+                String xForwardedProto,
+                String xPrestoPrefixUrl,
+                Duration maxWait,
+                boolean compressionEnabled,
+                boolean nestedDataSerializationEnabled,
+                boolean binaryResults,
+                String statementPathPrefix,
+                Optional<QueryResultsAdapter> queryResultsAdapter)
         {
             long lastToken = this.lastToken.get();
             // token should be the last token or the next token
@@ -720,9 +911,13 @@ public class QueuedStatementResource
                             xForwardedProto,
                             xPrestoPrefixUrl,
                             DispatchInfo.waitingForPrerequisites(NO_DURATION, NO_DURATION),
-                            binaryResults);
+                            binaryResults,
+                            statementPathPrefix);
 
-                    return immediateFuture(withCompressionConfiguration(Response.ok(queryResults), compressionEnabled)
+                    Response.ResponseBuilder response = queryResultsAdapter
+                            .map(adapter -> Response.ok(adapter.toProtocol(queryResults)).type(APPLICATION_PRESTO_PROTOBUF))
+                            .orElseGet(() -> Response.ok(queryResults));
+                    return immediateFuture(withCompressionConfiguration(response, compressionEnabled)
                             .cacheControl(getDefaultCacheControl())
                             .build());
                 }
@@ -753,15 +948,20 @@ public class QueuedStatementResource
                         durationUntilExpirationMs,
                         retryUrl,
                         retryExpirationEpochTime,
-                        isRetryQuery);
+                        isRetryQuery,
+                        statementPathPrefix,
+                        queryResultsAdapter);
 
                 if (executingQueryResponse.isPresent()) {
                     return executingQueryResponse.get();
                 }
             }
 
-            return immediateFuture(withCompressionConfiguration(Response.ok(
-                    createQueryResults(token + 1, uriInfo, xForwardedProto, xPrestoPrefixUrl, dispatchInfo.get(), binaryResults)), compressionEnabled)
+            QueryResults queryResults = createQueryResults(token + 1, uriInfo, xForwardedProto, xPrestoPrefixUrl, dispatchInfo.get(), binaryResults, statementPathPrefix);
+            Response.ResponseBuilder response = queryResultsAdapter
+                    .map(adapter -> Response.ok(adapter.toProtocol(queryResults)).type(APPLICATION_PRESTO_PROTOBUF))
+                    .orElseGet(() -> Response.ok(queryResults));
+            return immediateFuture(withCompressionConfiguration(response, compressionEnabled)
                     .cacheControl(getCacheControlMaxAge(durationUntilExpirationMs))
                     .build());
         }
@@ -773,7 +973,12 @@ public class QueuedStatementResource
 
         private QueryResults createQueryResults(long token, UriInfo uriInfo, String xForwardedProto, String xPrestoPrefixUrl, DispatchInfo dispatchInfo, boolean binaryResults)
         {
-            URI nextUri = getNextUri(token, uriInfo, xForwardedProto, xPrestoPrefixUrl, dispatchInfo, binaryResults);
+            return createQueryResults(token, uriInfo, xForwardedProto, xPrestoPrefixUrl, dispatchInfo, binaryResults, "/v1/statement");
+        }
+
+        private QueryResults createQueryResults(long token, UriInfo uriInfo, String xForwardedProto, String xPrestoPrefixUrl, DispatchInfo dispatchInfo, boolean binaryResults, String statementPathPrefix)
+        {
+            URI nextUri = getNextUri(token, uriInfo, xForwardedProto, xPrestoPrefixUrl, dispatchInfo, binaryResults, statementPathPrefix);
 
             Optional<QueryError> queryError = dispatchInfo.getFailureInfo()
                     .map(this::toQueryError);
@@ -795,13 +1000,13 @@ public class QueuedStatementResource
             return "x" + randomUUID().toString().toLowerCase(ENGLISH).replace("-", "");
         }
 
-        private URI getNextUri(long token, UriInfo uriInfo, String xForwardedProto, String xPrestoPrefixUrl, DispatchInfo dispatchInfo, boolean binaryResults)
+        private URI getNextUri(long token, UriInfo uriInfo, String xForwardedProto, String xPrestoPrefixUrl, DispatchInfo dispatchInfo, boolean binaryResults, String statementPathPrefix)
         {
             // if failed, query is complete
             if (dispatchInfo.getFailureInfo().isPresent()) {
                 return null;
             }
-            return getQueuedUri(queryId, slug, token, uriInfo, xForwardedProto, xPrestoPrefixUrl, binaryResults);
+            return getQueuedUri(queryId, slug, token, uriInfo, xForwardedProto, xPrestoPrefixUrl, binaryResults, statementPathPrefix);
         }
 
         private QueryError toQueryError(ExecutionFailureInfo executionFailureInfo)

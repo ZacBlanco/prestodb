@@ -26,6 +26,10 @@ message BasicQueryInfo {
   BasicQueryStats query_stats = 4;
 }
 
+message BasicQueryInfoList {
+  repeated BasicQueryInfo queries = 1;
+}
+
 message QueryInfo {
   string query_id = 1;
   string state = 2;

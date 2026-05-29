@@ -45,9 +45,11 @@ import com.facebook.presto.metadata.MetadataManager;
 import com.facebook.presto.metadata.Split;
 import com.facebook.presto.operator.ForScheduler;
 import com.facebook.presto.server.InternalCommunicationConfig;
+import com.facebook.presto.server.ServerConfig;
 import com.facebook.presto.server.TaskUpdateRequest;
 import com.facebook.presto.spi.plan.PlanNodeId;
 import com.facebook.presto.sql.planner.PlanFragment;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.Multimap;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.util.concurrent.AbstractEventExecutorGroup;
@@ -106,6 +108,8 @@ public class HttpRemoteTaskFactory
     private final DecayCounter taskUpdateRequestSize;
     private final boolean taskUpdateSizeTrackingEnabled;
     private final Optional<SafeEventLoopGroup> eventLoopGroup;
+    private final boolean protocolV2Enabled;
+    private final ObjectMapper objectMapper;
 
     @Inject
     public HttpRemoteTaskFactory(
@@ -126,6 +130,8 @@ public class HttpRemoteTaskFactory
             SmileCodec<PlanFragment> planFragmentSmileCodec,
             RemoteTaskStats stats,
             InternalCommunicationConfig communicationConfig,
+            ServerConfig serverConfig,
+            ObjectMapper objectMapper,
             MetadataManager metadataManager,
             QueryManager queryManager,
             HandleResolver handleResolver)
@@ -143,6 +149,8 @@ public class HttpRemoteTaskFactory
         this.executorMBean = new ThreadPoolExecutorMBean((ThreadPoolExecutor) coreExecutor);
         this.stats = requireNonNull(stats, "stats is null");
         requireNonNull(communicationConfig, "communicationConfig is null");
+        this.protocolV2Enabled = requireNonNull(serverConfig, "serverConfig is null").isProtocolV2Enabled();
+        this.objectMapper = requireNonNull(objectMapper, "objectMapper is null");
         binaryTransportEnabled = communicationConfig.isBinaryTransportEnabled();
         thriftTransportEnabled = communicationConfig.isThriftTransportEnabled();
         taskInfoThriftTransportEnabled = communicationConfig.isTaskInfoThriftTransportEnabled();
@@ -278,6 +286,8 @@ public class HttpRemoteTaskFactory
                 queryManager,
                 taskUpdateRequestSize,
                 taskUpdateSizeTrackingEnabled,
+                protocolV2Enabled,
+                objectMapper,
                 handleResolver,
                 schedulerStatsTracker,
                 (SafeEventLoopGroup.SafeEventLoop) eventLoopGroup.get().next());

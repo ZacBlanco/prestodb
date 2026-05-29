@@ -16,6 +16,7 @@ package com.facebook.presto.server.protocol;
 import com.facebook.airlift.units.DataSize;
 import com.facebook.airlift.units.Duration;
 import com.facebook.presto.dispatcher.DispatchInfo;
+import com.facebook.presto.protocol.v2.adapter.QueryResultsAdapter;
 import com.facebook.presto.spi.QueryId;
 import com.google.common.util.concurrent.ListenableFuture;
 import jakarta.inject.Inject;
@@ -27,6 +28,7 @@ import java.net.URI;
 import java.util.Optional;
 import java.util.OptionalLong;
 
+import static com.facebook.presto.server.protocol.QueryResourceUtil.toProtocolResponse;
 import static com.facebook.presto.server.protocol.QueryResourceUtil.toResponse;
 import static com.google.common.util.concurrent.Futures.transform;
 import static com.google.common.util.concurrent.MoreExecutors.directExecutor;
@@ -59,7 +61,9 @@ public class LocalExecutingQueryResponseProvider
             long durationUntilExpirationMs,
             Optional<URI> retryUrl,
             OptionalLong retryExpirationEpochTime,
-            boolean isRetryQuery)
+            boolean isRetryQuery,
+            String statementPathPrefix,
+            Optional<QueryResultsAdapter> queryResultsAdapter)
     {
         Query query;
         try {
@@ -69,8 +73,10 @@ public class LocalExecutingQueryResponseProvider
             return Optional.empty();
         }
         return Optional.of(transform(
-                query.waitForResults(0, uriInfo, scheme, maxWait, targetResultSize, binaryResults),
-                results -> toResponse(query, results, xPrestoPrefixUrl, compressionEnabled, nestedDataSerializationEnabled, durationUntilExpirationMs),
+                query.waitForResults(0, uriInfo, scheme, maxWait, targetResultSize, binaryResults, statementPathPrefix),
+                results -> queryResultsAdapter
+                        .map(adapter -> toProtocolResponse(query, results, xPrestoPrefixUrl, compressionEnabled, nestedDataSerializationEnabled, durationUntilExpirationMs, adapter))
+                        .orElseGet(() -> toResponse(query, results, xPrestoPrefixUrl, compressionEnabled, nestedDataSerializationEnabled, durationUntilExpirationMs)),
                 directExecutor()));
     }
 }

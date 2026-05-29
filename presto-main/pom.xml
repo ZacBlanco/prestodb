@@ -25,6 +25,17 @@
 
         <dependency>
             <groupId>com.facebook.presto</groupId>
+            <artifactId>presto-protocol</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.google.protobuf</groupId>
+            <artifactId>protobuf-java</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.facebook.presto</groupId>
             <artifactId>presto-built-in-worker-function-tools</artifactId>
         </dependency>
 

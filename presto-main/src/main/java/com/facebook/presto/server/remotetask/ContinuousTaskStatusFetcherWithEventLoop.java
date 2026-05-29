@@ -27,9 +27,11 @@ import com.facebook.drift.transport.netty.codec.Protocol;
 import com.facebook.presto.execution.StateMachine;
 import com.facebook.presto.execution.TaskId;
 import com.facebook.presto.execution.TaskStatus;
+import com.facebook.presto.protocol.v2.adapter.TaskStatusAdapter;
 import com.facebook.presto.server.RequestErrorTracker;
 import com.facebook.presto.server.SimpleHttpResponseCallback;
 import com.facebook.presto.server.SimpleHttpResponseHandler;
+import com.facebook.presto.server.protocol.v2.ProtobufResponseHandler;
 import com.facebook.presto.server.smile.BaseResponse;
 import com.facebook.presto.server.thrift.ThriftHttpResponseHandler;
 import com.facebook.presto.spi.HostAddress;
@@ -45,6 +47,7 @@ import java.util.function.Consumer;
 import static com.facebook.airlift.http.client.HttpUriBuilder.uriBuilderFrom;
 import static com.facebook.airlift.http.client.Request.Builder.prepareGet;
 import static com.facebook.airlift.units.Duration.nanosSince;
+import static com.facebook.presto.PrestoMediaTypes.APPLICATION_PRESTO_PROTOBUF;
 import static com.facebook.presto.client.PrestoHeaders.PRESTO_CURRENT_STATE;
 import static com.facebook.presto.client.PrestoHeaders.PRESTO_MAX_WAIT;
 import static com.facebook.presto.server.RequestErrorTracker.taskRequestErrorTracker;
@@ -57,6 +60,7 @@ import static com.facebook.presto.spi.StandardErrorCode.REMOTE_TASK_ERROR;
 import static com.facebook.presto.spi.StandardErrorCode.REMOTE_TASK_MISMATCH;
 import static com.facebook.presto.util.Failures.REMOTE_TASK_MISMATCH_ERROR;
 import static com.google.common.base.Verify.verify;
+import static com.google.common.net.HttpHeaders.ACCEPT;
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
@@ -77,6 +81,8 @@ class ContinuousTaskStatusFetcherWithEventLoop
     private final RemoteTaskStats stats;
     private final boolean binaryTransportEnabled;
     private final boolean thriftTransportEnabled;
+    private final boolean protocolV2Enabled;
+    private final TaskStatusAdapter taskStatusAdapter;
     private final Protocol thriftProtocol;
     private long currentRequestStartNanos;
     private boolean running;
@@ -95,6 +101,7 @@ class ContinuousTaskStatusFetcherWithEventLoop
             RemoteTaskStats stats,
             boolean binaryTransportEnabled,
             boolean thriftTransportEnabled,
+            boolean protocolV2Enabled,
             Protocol thriftProtocol)
     {
         requireNonNull(initialTaskStatus, "initialTaskStatus is null");
@@ -113,6 +120,8 @@ class ContinuousTaskStatusFetcherWithEventLoop
         this.stats = requireNonNull(stats, "stats is null");
         this.binaryTransportEnabled = binaryTransportEnabled;
         this.thriftTransportEnabled = thriftTransportEnabled;
+        this.protocolV2Enabled = protocolV2Enabled;
+        this.taskStatusAdapter = new TaskStatusAdapter();
         this.thriftProtocol = requireNonNull(thriftProtocol, "thriftProtocol is null");
     }
 
@@ -166,7 +175,12 @@ class ContinuousTaskStatusFetcherWithEventLoop
 
         Request.Builder requestBuilder;
         ResponseHandler responseHandler;
-        if (thriftTransportEnabled) {
+        if (protocolV2Enabled) {
+            requestBuilder = prepareGet()
+                    .setHeader(ACCEPT, APPLICATION_PRESTO_PROTOBUF);
+            responseHandler = new ProtobufResponseHandler<>(com.facebook.presto.protocol.v2.TaskStatus.parser(), status -> taskStatusAdapter.fromProtocol(status));
+        }
+        else if (thriftTransportEnabled) {
             requestBuilder = ThriftRequestUtils.prepareThriftGet(thriftProtocol);
             responseHandler = new ThriftResponseHandler(unwrapThriftCodec(taskStatusCodec));
         }
@@ -179,7 +193,7 @@ class ContinuousTaskStatusFetcherWithEventLoop
             responseHandler = createAdaptingJsonResponseHandler((JsonCodec<TaskStatus>) taskStatusCodec);
         }
 
-        Request request = requestBuilder.setUri(uriBuilderFrom(taskStatus.getSelf()).appendPath("status").build())
+        Request request = requestBuilder.setUri(getTaskStatusUri(taskStatus))
                 .setHeader(PRESTO_CURRENT_STATE, taskStatus.getState().toString())
                 .setHeader(PRESTO_MAX_WAIT, refreshMaxWait.toString())
                 .build();
@@ -199,6 +213,16 @@ class ContinuousTaskStatusFetcherWithEventLoop
                 future,
                 callback,
                 taskEventLoop);
+    }
+
+    private java.net.URI getTaskStatusUri(TaskStatus taskStatus)
+    {
+        if (protocolV2Enabled) {
+            return uriBuilderFrom(taskStatus.getSelf())
+                    .replacePath("/v2/task/" + taskId + "/status")
+                    .build();
+        }
+        return uriBuilderFrom(taskStatus.getSelf()).appendPath("status").build();
     }
 
     TaskStatus getTaskStatus()

@@ -13,27 +13,45 @@
  */
 package com.facebook.presto.protocol.v2.adapter;
 
+import com.facebook.presto.execution.scheduler.ExecutionWriterTarget;
 import com.facebook.presto.execution.scheduler.TableWriteInfo;
+import com.facebook.presto.metadata.AnalyzeTableHandle;
 
-import static com.facebook.presto.protocol.v2.adapter.ConnectorPayloadAdapter.toConnectorPayload;
+import java.util.Optional;
+
 import static java.util.Objects.requireNonNull;
 
 public class TableWriteInfoAdapter
         implements ProtocolAdapter<TableWriteInfo, com.facebook.presto.protocol.v2.TableWriteInfo>
 {
+    private final ConnectorPayloadAdapter connectorPayloadAdapter;
+
+    public TableWriteInfoAdapter()
+    {
+        this(new ConnectorPayloadAdapter());
+    }
+
+    public TableWriteInfoAdapter(ConnectorPayloadAdapter connectorPayloadAdapter)
+    {
+        this.connectorPayloadAdapter = requireNonNull(connectorPayloadAdapter, "connectorPayloadAdapter is null");
+    }
+
     @Override
     public com.facebook.presto.protocol.v2.TableWriteInfo toProtocol(TableWriteInfo value)
     {
         requireNonNull(value, "value is null");
         com.facebook.presto.protocol.v2.TableWriteInfo.Builder builder = com.facebook.presto.protocol.v2.TableWriteInfo.newBuilder();
-        value.getWriterTarget().ifPresent(writerTarget -> builder.setWriterTarget(toConnectorPayload(writerTarget)));
-        value.getAnalyzeTableHandle().ifPresent(analyzeTableHandle -> builder.setAnalyzeTableHandle(toConnectorPayload(analyzeTableHandle)));
+        value.getWriterTarget().ifPresent(writerTarget -> builder.setWriterTarget(connectorPayloadAdapter.toConnectorPayload(writerTarget)));
+        value.getAnalyzeTableHandle().ifPresent(analyzeTableHandle -> builder.setAnalyzeTableHandle(connectorPayloadAdapter.toConnectorPayload(analyzeTableHandle)));
         return builder.build();
     }
 
     @Override
     public TableWriteInfo fromProtocol(com.facebook.presto.protocol.v2.TableWriteInfo value)
     {
-        throw new UnsupportedOperationException("TableWriteInfo proto-to-Java conversion requires connector payload decoding");
+        requireNonNull(value, "value is null");
+        return new TableWriteInfo(
+                value.hasWriterTarget() ? Optional.of(connectorPayloadAdapter.fromConnectorPayload(value.getWriterTarget(), ExecutionWriterTarget.class)) : Optional.empty(),
+                value.hasAnalyzeTableHandle() ? Optional.of(connectorPayloadAdapter.fromConnectorPayload(value.getAnalyzeTableHandle(), AnalyzeTableHandle.class)) : Optional.empty());
     }
 }

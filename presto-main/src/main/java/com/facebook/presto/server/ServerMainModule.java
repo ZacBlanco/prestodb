@@ -158,6 +158,8 @@ import com.facebook.presto.resourcemanager.ResourceManagerClusterStatusSender;
 import com.facebook.presto.resourcemanager.ResourceManagerConfig;
 import com.facebook.presto.resourcemanager.ResourceManagerInconsistentException;
 import com.facebook.presto.resourcemanager.ResourceManagerResourceGroupService;
+import com.facebook.presto.server.protocol.v2.ProtobufMessageBodyReader;
+import com.facebook.presto.server.protocol.v2.ProtobufMessageBodyWriter;
 import com.facebook.presto.server.remotetask.DecompressionFilter;
 import com.facebook.presto.server.remotetask.HttpLocationFactory;
 import com.facebook.presto.server.remotetask.ReactorNettyHttpClientConfig;
@@ -457,10 +459,14 @@ public class ServerMainModule
 
         // task execution
         jaxrsBinder(binder).bind(TaskResource.class);
+        jaxrsBinder(binder).bind(TaskResourceV2.class);
         jaxrsBinder(binder).bind(ThriftTaskUpdateRequestBodyReader.class);
+        jaxrsBinder(binder).bind(ProtobufMessageBodyReader.class);
+        jaxrsBinder(binder).bind(ProtobufMessageBodyWriter.class);
         jaxrsBinder(binder).bind(DecompressionFilter.class);
 
         newExporter(binder).export(TaskResource.class).withGeneratedName();
+        newExporter(binder).export(TaskResourceV2.class).withGeneratedName();
         jaxrsBinder(binder).bind(TaskExecutorResource.class);
         newExporter(binder).export(TaskExecutorResource.class).withGeneratedName();
         binder.bind(TaskManagementExecutor.class).in(Scopes.SINGLETON);

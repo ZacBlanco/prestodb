@@ -44,6 +44,7 @@ public class ServerConfig
     private Duration clusterResourceGroupStateInfoExpirationDuration = new Duration(0, MILLISECONDS);
     private String clusterTag;
     private boolean webUIEnabled = true;
+    private boolean protocolV2Enabled;
 
     public boolean isResourceManager()
     {
@@ -126,6 +127,18 @@ public class ServerConfig
     public ServerConfig setWebUIEnabled(boolean webUIEnabled)
     {
         this.webUIEnabled = webUIEnabled;
+        return this;
+    }
+
+    public boolean isProtocolV2Enabled()
+    {
+        return protocolV2Enabled;
+    }
+
+    @Config("protocol.v2.enabled")
+    public ServerConfig setProtocolV2Enabled(boolean protocolV2Enabled)
+    {
+        this.protocolV2Enabled = protocolV2Enabled;
         return this;
     }
 

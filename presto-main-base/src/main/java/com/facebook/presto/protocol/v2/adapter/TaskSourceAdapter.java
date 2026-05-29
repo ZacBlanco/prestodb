@@ -14,14 +14,27 @@
 package com.facebook.presto.protocol.v2.adapter;
 
 import com.facebook.presto.execution.TaskSource;
+import com.facebook.presto.spi.plan.PlanNodeId;
+import com.google.common.collect.ImmutableSet;
 
 import static java.util.Objects.requireNonNull;
 
 public class TaskSourceAdapter
         implements ProtocolAdapter<TaskSource, com.facebook.presto.protocol.v2.TaskSource>
 {
-    private final ScheduledSplitAdapter scheduledSplitAdapter = new ScheduledSplitAdapter();
-    private final LifespanAdapter lifespanAdapter = new LifespanAdapter();
+    private final ScheduledSplitAdapter scheduledSplitAdapter;
+    private final LifespanAdapter lifespanAdapter;
+
+    public TaskSourceAdapter()
+    {
+        this(new ScheduledSplitAdapter(), new LifespanAdapter());
+    }
+
+    public TaskSourceAdapter(ScheduledSplitAdapter scheduledSplitAdapter, LifespanAdapter lifespanAdapter)
+    {
+        this.scheduledSplitAdapter = requireNonNull(scheduledSplitAdapter, "scheduledSplitAdapter is null");
+        this.lifespanAdapter = requireNonNull(lifespanAdapter, "lifespanAdapter is null");
+    }
 
     @Override
     public com.facebook.presto.protocol.v2.TaskSource toProtocol(TaskSource value)
@@ -44,6 +57,19 @@ public class TaskSourceAdapter
     @Override
     public TaskSource fromProtocol(com.facebook.presto.protocol.v2.TaskSource value)
     {
-        throw new UnsupportedOperationException("TaskSource proto-to-Java conversion requires split payload decoding");
+        requireNonNull(value, "value is null");
+        ImmutableSet.Builder<com.facebook.presto.execution.ScheduledSplit> splits = ImmutableSet.builder();
+        value.getSplitsList().stream()
+                .map(scheduledSplitAdapter::fromProtocol)
+                .forEach(splits::add);
+        ImmutableSet.Builder<com.facebook.presto.execution.Lifespan> noMoreSplitsForLifespan = ImmutableSet.builder();
+        value.getNoMoreSplitsForLifespanList().stream()
+                .map(lifespanAdapter::fromProtocol)
+                .forEach(noMoreSplitsForLifespan::add);
+        return new TaskSource(
+                new PlanNodeId(value.getPlanNodeId()),
+                splits.build(),
+                noMoreSplitsForLifespan.build(),
+                value.getNoMoreSplits());
     }
 }

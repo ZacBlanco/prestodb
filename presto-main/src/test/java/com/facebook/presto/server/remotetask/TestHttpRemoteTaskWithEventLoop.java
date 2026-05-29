@@ -56,7 +56,11 @@ import com.facebook.presto.metadata.HandleJsonModule;
 import com.facebook.presto.metadata.HandleResolver;
 import com.facebook.presto.metadata.InternalNode;
 import com.facebook.presto.metadata.Split;
+import com.facebook.presto.protocol.v2.adapter.TaskInfoAdapter;
+import com.facebook.presto.protocol.v2.adapter.TaskStatusAdapter;
+import com.facebook.presto.protocol.v2.adapter.TaskUpdateRequestAdapter;
 import com.facebook.presto.server.InternalCommunicationConfig;
+import com.facebook.presto.server.ServerConfig;
 import com.facebook.presto.server.TaskUpdateRequest;
 import com.facebook.presto.server.thrift.ConnectorSplitThriftCodec;
 import com.facebook.presto.server.thrift.DeleteTableHandleThriftCodec;
@@ -84,6 +88,7 @@ import com.facebook.presto.testing.TestingHandleResolver;
 import com.facebook.presto.testing.TestingSplit;
 import com.facebook.presto.testing.TestingTransactionHandle;
 import com.facebook.presto.type.TypeDeserializer;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.ImmutableMultimap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.util.concurrent.SettableFuture;
@@ -104,10 +109,12 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.UriInfo;
 import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
 
+import java.io.IOException;
 import java.lang.reflect.Method;
 import java.net.URI;
 import java.util.HashMap;
@@ -127,6 +134,7 @@ import static com.facebook.airlift.json.JsonBinder.jsonBinder;
 import static com.facebook.airlift.json.JsonCodecBinder.jsonCodecBinder;
 import static com.facebook.airlift.json.smile.SmileCodecBinder.smileCodecBinder;
 import static com.facebook.drift.codec.guice.ThriftCodecBinder.thriftCodecBinder;
+import static com.facebook.presto.PrestoMediaTypes.APPLICATION_PRESTO_PROTOBUF;
 import static com.facebook.presto.SessionTestUtils.TEST_SESSION;
 import static com.facebook.presto.client.PrestoHeaders.PRESTO_CURRENT_STATE;
 import static com.facebook.presto.client.PrestoHeaders.PRESTO_MAX_WAIT;
@@ -194,32 +202,14 @@ public class TestHttpRemoteTaskWithEventLoop
     public void testRegular(boolean useThriftEncoding)
             throws Exception
     {
-        AtomicLong lastActivityNanos = new AtomicLong(System.nanoTime());
-        TestingTaskResource testingTaskResource = new TestingTaskResource(lastActivityNanos, FailureScenario.NO_FAILURE);
+        assertRemoteTaskRegular(useThriftEncoding, false);
+    }
 
-        HttpRemoteTaskFactory httpRemoteTaskFactory = createHttpRemoteTaskFactory(testingTaskResource, useThriftEncoding);
-
-        RemoteTask remoteTask = createRemoteTask(httpRemoteTaskFactory);
-
-        testingTaskResource.setInitialTaskInfo(remoteTask.getTaskInfo());
-        remoteTask.start();
-
-        Lifespan lifespan = Lifespan.driverGroup(3);
-        remoteTask.addSplits(ImmutableMultimap.of(TABLE_SCAN_NODE_ID, new Split(new ConnectorId("test"), TestingTransactionHandle.create(), TestingSplit.createLocalSplit(), lifespan, NON_CACHEABLE)));
-        poll(() -> testingTaskResource.getTaskSource(TABLE_SCAN_NODE_ID) != null);
-        poll(() -> testingTaskResource.getTaskSource(TABLE_SCAN_NODE_ID).getSplits().size() == 1);
-
-        remoteTask.noMoreSplits(TABLE_SCAN_NODE_ID, lifespan);
-        poll(() -> testingTaskResource.getTaskSource(TABLE_SCAN_NODE_ID).getNoMoreSplitsForLifespan().size() == 1);
-
-        remoteTask.noMoreSplits(TABLE_SCAN_NODE_ID);
-        poll(() -> testingTaskResource.getTaskSource(TABLE_SCAN_NODE_ID).isNoMoreSplits());
-
-        remoteTask.cancel();
-        poll(() -> remoteTask.getTaskStatus().getState().isDone());
-        poll(() -> remoteTask.getTaskInfo().getTaskStatus().getState().isDone());
-
-        httpRemoteTaskFactory.stop();
+    @Test(timeOut = 60000)
+    public void testRegularWithProtocolV2TaskUpdate()
+            throws Exception
+    {
+        assertRemoteTaskRegular(false, true);
     }
 
     @Test(timeOut = 50000)
@@ -357,6 +347,43 @@ public class TestHttpRemoteTaskWithEventLoop
                 SchedulerStatsTracker.NOOP);
     }
 
+    private void assertRemoteTaskRegular(boolean useThriftEncoding, boolean protocolV2Enabled)
+            throws Exception
+    {
+        AtomicLong lastActivityNanos = new AtomicLong(System.nanoTime());
+        TestingTaskResource testingTaskResource = new TestingTaskResource(lastActivityNanos, FailureScenario.NO_FAILURE);
+
+        HttpRemoteTaskFactory httpRemoteTaskFactory = createHttpRemoteTaskFactory(testingTaskResource, useThriftEncoding, protocolV2Enabled);
+
+        RemoteTask remoteTask = createRemoteTask(httpRemoteTaskFactory);
+
+        testingTaskResource.setInitialTaskInfo(remoteTask.getTaskInfo());
+        remoteTask.start();
+
+        Lifespan lifespan = Lifespan.driverGroup(3);
+        remoteTask.addSplits(ImmutableMultimap.of(TABLE_SCAN_NODE_ID, new Split(new ConnectorId("test"), TestingTransactionHandle.create(), TestingSplit.createLocalSplit(), lifespan, NON_CACHEABLE)));
+        poll(() -> testingTaskResource.getTaskSource(TABLE_SCAN_NODE_ID) != null);
+        poll(() -> testingTaskResource.getTaskSource(TABLE_SCAN_NODE_ID).getSplits().size() == 1);
+
+        remoteTask.noMoreSplits(TABLE_SCAN_NODE_ID, lifespan);
+        poll(() -> testingTaskResource.getTaskSource(TABLE_SCAN_NODE_ID).getNoMoreSplitsForLifespan().size() == 1);
+
+        remoteTask.noMoreSplits(TABLE_SCAN_NODE_ID);
+        poll(() -> testingTaskResource.getTaskSource(TABLE_SCAN_NODE_ID).isNoMoreSplits());
+
+        if (protocolV2Enabled) {
+            assertTrue(testingTaskResource.isProtocolV2TaskUpdateUsed());
+            poll(testingTaskResource::isProtocolV2TaskStatusUsed);
+            poll(testingTaskResource::isProtocolV2TaskInfoUsed);
+        }
+
+        remoteTask.cancel();
+        poll(() -> remoteTask.getTaskStatus().getState().isDone());
+        poll(() -> remoteTask.getTaskInfo().getTaskStatus().getState().isDone());
+
+        httpRemoteTaskFactory.stop();
+    }
+
     private static HttpRemoteTaskFactory createHttpRemoteTaskFactory(TestingTaskResource testingTaskResource, boolean useThriftEncoding)
             throws Exception
     {
@@ -364,7 +391,20 @@ public class TestHttpRemoteTaskWithEventLoop
         return createHttpRemoteTaskFactory(testingTaskResource, useThriftEncoding, internalCommunicationConfig);
     }
 
+    private static HttpRemoteTaskFactory createHttpRemoteTaskFactory(TestingTaskResource testingTaskResource, boolean useThriftEncoding, boolean protocolV2Enabled)
+            throws Exception
+    {
+        InternalCommunicationConfig internalCommunicationConfig = new InternalCommunicationConfig().setThriftTransportEnabled(useThriftEncoding);
+        return createHttpRemoteTaskFactory(testingTaskResource, useThriftEncoding, internalCommunicationConfig, protocolV2Enabled);
+    }
+
     private static HttpRemoteTaskFactory createHttpRemoteTaskFactory(TestingTaskResource testingTaskResource, boolean useThriftEncoding, InternalCommunicationConfig internalCommunicationConfig)
+            throws Exception
+    {
+        return createHttpRemoteTaskFactory(testingTaskResource, useThriftEncoding, internalCommunicationConfig, false);
+    }
+
+    private static HttpRemoteTaskFactory createHttpRemoteTaskFactory(TestingTaskResource testingTaskResource, boolean useThriftEncoding, InternalCommunicationConfig internalCommunicationConfig, boolean protocolV2Enabled)
             throws Exception
     {
         Bootstrap app = new Bootstrap(
@@ -428,6 +468,7 @@ public class TestHttpRemoteTaskWithEventLoop
                     private HttpRemoteTaskFactory createHttpRemoteTaskFactory(
                             JsonMapper jsonMapper,
                             ThriftMapper thriftMapper,
+                            ObjectMapper objectMapper,
                             JsonCodec<TaskStatus> taskStatusJsonCodec,
                             SmileCodec<TaskStatus> taskStatusSmileCodec,
                             ThriftCodec<TaskStatus> taskStatusThriftCodec,
@@ -443,6 +484,7 @@ public class TestHttpRemoteTaskWithEventLoop
                         JaxrsTestingHttpProcessor jaxrsTestingHttpProcessor = new JaxrsTestingHttpProcessor(URI.create("http://fake.invalid/"), testingTaskResource, jsonMapper, thriftMapper);
                         TestingHttpClient testingHttpClient = new TestingHttpClient(jaxrsTestingHttpProcessor.setTrace(TRACE_HTTP));
                         testingTaskResource.setHttpClient(testingHttpClient);
+                        testingTaskResource.setObjectMapper(objectMapper);
                         return new HttpRemoteTaskFactory(
                                 new QueryManagerConfig(),
                                 TASK_MANAGER_CONFIG,
@@ -461,6 +503,8 @@ public class TestHttpRemoteTaskWithEventLoop
                                 planFragmentSmileCodec,
                                 new RemoteTaskStats(),
                                 internalCommunicationConfig,
+                                new ServerConfig().setProtocolV2Enabled(protocolV2Enabled),
+                                objectMapper,
                                 createTestMetadataManager(),
                                 new TestQueryManager(),
                                 new HandleResolver());
@@ -510,7 +554,7 @@ public class TestHttpRemoteTaskWithEventLoop
         REJECTED_EXECUTION,
     }
 
-    @Path("/task/{nodeId}")
+    @Path("/")
     public static class TestingTaskResource
     {
         private static final UUID INITIAL_TASK_INSTANCE_ID = UUID.randomUUID();
@@ -523,6 +567,7 @@ public class TestHttpRemoteTaskWithEventLoop
 
         private TaskInfo initialTaskInfo;
         private TaskStatus initialTaskStatus;
+        private ObjectMapper objectMapper;
         private long version;
         private TaskState taskState;
         private long taskInstanceIdLeastSignificantBits = INITIAL_TASK_INSTANCE_ID.getLeastSignificantBits();
@@ -541,8 +586,13 @@ public class TestHttpRemoteTaskWithEventLoop
             httpClient.set(newValue);
         }
 
+        public void setObjectMapper(ObjectMapper objectMapper)
+        {
+            this.objectMapper = requireNonNull(objectMapper, "objectMapper is null");
+        }
+
         @GET
-        @Path("{taskId}")
+        @Path("/task/{nodeId}/{taskId}")
         @Produces(MediaType.APPLICATION_JSON)
         public synchronized TaskInfo getTaskInfo(
                 @PathParam("taskId") final TaskId taskId,
@@ -556,9 +606,12 @@ public class TestHttpRemoteTaskWithEventLoop
 
         Map<PlanNodeId, TaskSource> taskSourceMap = new HashMap<>();
         private TaskUpdateRequest lastTaskUpdateRequest;
+        private boolean protocolV2TaskUpdateUsed;
+        private boolean protocolV2TaskInfoUsed;
+        private boolean protocolV2TaskStatusUsed;
 
         @POST
-        @Path("{taskId}")
+        @Path("/task/{nodeId}/{taskId}")
         @Consumes(MediaType.APPLICATION_JSON)
         @Produces(MediaType.APPLICATION_JSON)
         public synchronized TaskInfo createOrUpdateTask(
@@ -572,6 +625,31 @@ public class TestHttpRemoteTaskWithEventLoop
             }
             lastActivityNanos.set(System.nanoTime());
             return buildTaskInfo();
+        }
+
+        @POST
+        @Path("/v2/task/{taskId}")
+        @Consumes(APPLICATION_PRESTO_PROTOBUF)
+        public synchronized Response createOrUpdateTaskV2(
+                @PathParam("taskId") TaskId taskId,
+                byte[] protocolTaskUpdateRequestBytes,
+                @Context UriInfo uriInfo)
+        {
+            protocolV2TaskUpdateUsed = true;
+            com.facebook.presto.protocol.v2.TaskUpdateRequest protocolTaskUpdateRequest;
+            try {
+                protocolTaskUpdateRequest = com.facebook.presto.protocol.v2.TaskUpdateRequest.parseFrom(protocolTaskUpdateRequestBytes);
+            }
+            catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+            TaskUpdateRequest taskUpdateRequest = new TaskUpdateRequestAdapter(objectMapper).fromProtocol(protocolTaskUpdateRequest);
+            this.lastTaskUpdateRequest = taskUpdateRequest;
+            for (TaskSource source : taskUpdateRequest.getSources()) {
+                taskSourceMap.compute(source.getPlanNodeId(), (planNodeId, taskSource) -> taskSource == null ? source : taskSource.update(source));
+            }
+            lastActivityNanos.set(System.nanoTime());
+            return Response.noContent().build();
         }
 
         public synchronized TaskSource getTaskSource(PlanNodeId planNodeId)
@@ -588,8 +666,59 @@ public class TestHttpRemoteTaskWithEventLoop
             return lastTaskUpdateRequest;
         }
 
+        public synchronized boolean isProtocolV2TaskUpdateUsed()
+        {
+            return protocolV2TaskUpdateUsed;
+        }
+
+        public synchronized boolean isProtocolV2TaskInfoUsed()
+        {
+            return protocolV2TaskInfoUsed;
+        }
+
+        public synchronized boolean isProtocolV2TaskStatusUsed()
+        {
+            return protocolV2TaskStatusUsed;
+        }
+
         @GET
-        @Path("{taskId}/status")
+        @Path("/v2/task/{taskId}")
+        @Produces(APPLICATION_PRESTO_PROTOBUF)
+        public synchronized byte[] getTaskInfoV2(
+                @PathParam("taskId") final TaskId taskId,
+                @HeaderParam(PRESTO_CURRENT_STATE) TaskState currentState,
+                @HeaderParam(PRESTO_MAX_WAIT) Duration maxWait,
+                @Context UriInfo uriInfo)
+                throws InterruptedException
+        {
+            protocolV2TaskInfoUsed = true;
+            lastActivityNanos.set(System.nanoTime());
+            if (maxWait != null) {
+                wait(maxWait.roundTo(MILLISECONDS));
+            }
+            return new TaskInfoAdapter(objectMapper).toProtocol(buildTaskInfo()).toByteArray();
+        }
+
+        @GET
+        @Path("/v2/task/{taskId}/status")
+        @Produces(APPLICATION_PRESTO_PROTOBUF)
+        public synchronized byte[] getTaskStatusV2(
+                @PathParam("taskId") TaskId taskId,
+                @HeaderParam(PRESTO_CURRENT_STATE) TaskState currentState,
+                @HeaderParam(PRESTO_MAX_WAIT) Duration maxWait,
+                @Context UriInfo uriInfo)
+                throws InterruptedException
+        {
+            protocolV2TaskStatusUsed = true;
+            lastActivityNanos.set(System.nanoTime());
+            if (maxWait != null) {
+                wait(maxWait.roundTo(MILLISECONDS));
+            }
+            return new TaskStatusAdapter().toProtocol(buildTaskStatus()).toByteArray();
+        }
+
+        @GET
+        @Path("/task/{nodeId}/{taskId}/status")
         @Produces({MediaType.APPLICATION_JSON, APPLICATION_THRIFT_BINARY, APPLICATION_THRIFT_COMPACT, APPLICATION_THRIFT_FB_COMPACT})
         public synchronized TaskStatus getTaskStatus(
                 @PathParam("taskId") TaskId taskId,
@@ -605,7 +734,7 @@ public class TestHttpRemoteTaskWithEventLoop
         }
 
         @DELETE
-        @Path("{taskId}")
+        @Path("/task/{nodeId}/{taskId}")
         @Produces(MediaType.APPLICATION_JSON)
         public synchronized TaskInfo deleteTask(
                 @PathParam("taskId") TaskId taskId,

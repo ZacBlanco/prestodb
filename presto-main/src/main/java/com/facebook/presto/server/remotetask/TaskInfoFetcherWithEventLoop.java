@@ -33,11 +33,14 @@ import com.facebook.presto.execution.TaskInfo;
 import com.facebook.presto.execution.TaskStatus;
 import com.facebook.presto.metadata.HandleResolver;
 import com.facebook.presto.metadata.MetadataManager;
+import com.facebook.presto.protocol.v2.adapter.TaskInfoAdapter;
 import com.facebook.presto.server.RequestErrorTracker;
 import com.facebook.presto.server.SimpleHttpResponseCallback;
 import com.facebook.presto.server.SimpleHttpResponseHandler;
+import com.facebook.presto.server.protocol.v2.ProtobufResponseHandler;
 import com.facebook.presto.server.smile.BaseResponse;
 import com.facebook.presto.server.thrift.ThriftHttpResponseHandler;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
@@ -52,6 +55,7 @@ import java.util.function.Consumer;
 import static com.facebook.airlift.http.client.HttpUriBuilder.uriBuilderFrom;
 import static com.facebook.airlift.http.client.Request.Builder.prepareGet;
 import static com.facebook.airlift.units.Duration.nanosSince;
+import static com.facebook.presto.PrestoMediaTypes.APPLICATION_PRESTO_PROTOBUF;
 import static com.facebook.presto.client.PrestoHeaders.PRESTO_CURRENT_STATE;
 import static com.facebook.presto.client.PrestoHeaders.PRESTO_MAX_WAIT;
 import static com.facebook.presto.server.RequestErrorTracker.taskRequestErrorTracker;
@@ -61,6 +65,7 @@ import static com.facebook.presto.server.smile.FullSmileResponseHandler.createFu
 import static com.facebook.presto.server.thrift.ThriftCodecWrapper.unwrapThriftCodec;
 import static com.facebook.presto.spi.StandardErrorCode.REMOTE_TASK_ERROR;
 import static com.google.common.base.Verify.verify;
+import static com.google.common.net.HttpHeaders.ACCEPT;
 import static java.util.Objects.requireNonNull;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
@@ -96,6 +101,8 @@ public class TaskInfoFetcherWithEventLoop
     private final MetadataManager metadataManager;
     private final QueryManager queryManager;
     private final HandleResolver handleResolver;
+    private final boolean protocolV2Enabled;
+    private final TaskInfoAdapter taskInfoAdapter;
     private final Protocol thriftProtocol;
 
     public TaskInfoFetcherWithEventLoop(
@@ -115,6 +122,8 @@ public class TaskInfoFetcherWithEventLoop
             MetadataManager metadataManager,
             QueryManager queryManager,
             HandleResolver handleResolver,
+            boolean protocolV2Enabled,
+            ObjectMapper objectMapper,
             Protocol thriftProtocol)
     {
         requireNonNull(initialTask, "initialTask is null");
@@ -140,6 +149,8 @@ public class TaskInfoFetcherWithEventLoop
         this.metadataManager = requireNonNull(metadataManager, "metadataManager is null");
         this.queryManager = requireNonNull(queryManager, "queryManager is null");
         this.handleResolver = requireNonNull(handleResolver, "handleResolver is null");
+        this.protocolV2Enabled = protocolV2Enabled;
+        this.taskInfoAdapter = new TaskInfoAdapter(requireNonNull(objectMapper, "objectMapper is null"));
         this.thriftProtocol = requireNonNull(thriftProtocol, "thriftProtocol is null");
     }
 
@@ -244,19 +255,25 @@ public class TaskInfoFetcherWithEventLoop
             return;
         }
 
-        HttpUriBuilder httpUriBuilder = uriBuilderFrom(taskStatus.getSelf());
-        URI uri = summarizeTaskInfo ? httpUriBuilder.addParameter("summarize").build() : httpUriBuilder.build();
-        Request.Builder requestBuilder = setContentTypeHeaders(isBinaryTransportEnabled, prepareGet());
+        URI uri = getTaskInfoUri(taskStatus);
+        Request.Builder requestBuilder;
 
         ResponseHandler responseHandler;
-        if (isThriftTransportEnabled) {
+        if (protocolV2Enabled) {
+            requestBuilder = prepareGet()
+                    .setHeader(ACCEPT, APPLICATION_PRESTO_PROTOBUF);
+            responseHandler = new ProtobufResponseHandler<>(com.facebook.presto.protocol.v2.TaskInfo.parser(), taskInfoAdapter::fromProtocol);
+        }
+        else if (isThriftTransportEnabled) {
             requestBuilder = ThriftRequestUtils.prepareThriftGet(thriftProtocol);
             responseHandler = new ThriftResponseHandler(unwrapThriftCodec(taskInfoCodec));
         }
         else if (isBinaryTransportEnabled) {
+            requestBuilder = setContentTypeHeaders(isBinaryTransportEnabled, prepareGet());
             responseHandler = createFullSmileResponseHandler((SmileCodec<TaskInfo>) taskInfoCodec);
         }
         else {
+            requestBuilder = setContentTypeHeaders(isBinaryTransportEnabled, prepareGet());
             responseHandler = createAdaptingJsonResponseHandler((JsonCodec<TaskInfo>) taskInfoCodec);
         }
 
@@ -281,6 +298,18 @@ public class TaskInfoFetcherWithEventLoop
                 future,
                 callback,
                 taskEventLoop);
+    }
+
+    private URI getTaskInfoUri(TaskStatus taskStatus)
+    {
+        HttpUriBuilder httpUriBuilder = uriBuilderFrom(taskStatus.getSelf());
+        if (protocolV2Enabled) {
+            httpUriBuilder.replacePath("/v2/task/" + taskId);
+        }
+        if (summarizeTaskInfo) {
+            httpUriBuilder.addParameter("summarize");
+        }
+        return httpUriBuilder.build();
     }
 
     void updateTaskInfo(TaskInfo newValue)

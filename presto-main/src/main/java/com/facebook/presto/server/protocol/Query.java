@@ -354,6 +354,11 @@ class Query
 
     public synchronized ListenableFuture<QueryResults> waitForResults(long token, UriInfo uriInfo, String scheme, Duration wait, DataSize targetResultSize, boolean binaryResults)
     {
+        return waitForResults(token, uriInfo, scheme, wait, targetResultSize, binaryResults, "/v1/statement");
+    }
+
+    public synchronized ListenableFuture<QueryResults> waitForResults(long token, UriInfo uriInfo, String scheme, Duration wait, DataSize targetResultSize, boolean binaryResults, String statementPathPrefix)
+    {
         // before waiting, check if this request has already been processed and cached
         Optional<QueryResults> cachedResult = getCachedResult(token);
         if (cachedResult.isPresent()) {
@@ -368,7 +373,7 @@ class Query
                 timeoutExecutor);
 
         // when state changes, fetch the next result
-        return Futures.transform(futureStateChange, ignored -> getNextResultWithRetry(token, uriInfo, scheme, targetResultSize, binaryResults), resultsProcessorExecutor);
+        return Futures.transform(futureStateChange, ignored -> getNextResultWithRetry(token, uriInfo, scheme, targetResultSize, binaryResults, statementPathPrefix), resultsProcessorExecutor);
     }
 
     private synchronized ListenableFuture<?> getFutureStateChange()
@@ -421,9 +426,9 @@ class Query
         return Optional.empty();
     }
 
-    private synchronized QueryResults getNextResultWithRetry(long token, UriInfo uriInfo, String scheme, DataSize targetResultSize, boolean binaryResults)
+    private synchronized QueryResults getNextResultWithRetry(long token, UriInfo uriInfo, String scheme, DataSize targetResultSize, boolean binaryResults, String statementPathPrefix)
     {
-        QueryResults queryResults = getNextResult(token, uriInfo, scheme, targetResultSize, binaryResults);
+        QueryResults queryResults = getNextResult(token, uriInfo, scheme, targetResultSize, binaryResults, statementPathPrefix);
 
         if (queryResults.getError() == null) {
             return queryResults;
@@ -461,7 +466,7 @@ class Query
 
         // build a new query with next uri
         // we expect failed nodes have been removed from discovery server upon query failure
-        URI nextUri = createRetryUri(scheme, uriInfo);
+        URI nextUri = createRetryUri(scheme, uriInfo, statementPathPrefix);
 
         return new QueryResults(
                 queryId.toString(),
@@ -481,7 +486,7 @@ class Query
                 queryResults.getUpdateCount());
     }
 
-    private synchronized QueryResults getNextResult(long token, UriInfo uriInfo, String scheme, DataSize targetResultSize, boolean binaryResults)
+    private synchronized QueryResults getNextResult(long token, UriInfo uriInfo, String scheme, DataSize targetResultSize, boolean binaryResults, String statementPathPrefix)
     {
         // check if the result for the token have already been created
         Optional<QueryResults> cachedResult = getCachedResult(token);
@@ -596,7 +601,7 @@ class Query
 
         URI nextResultsUri = null;
         if (nextToken.isPresent()) {
-            nextResultsUri = createNextResultsUri(scheme, uriInfo, nextToken.getAsLong(), binaryResults);
+            nextResultsUri = createNextResultsUri(scheme, uriInfo, nextToken.getAsLong(), binaryResults, statementPathPrefix);
         }
 
         // update catalog, schema, and path
@@ -685,11 +690,11 @@ class Query
         return Futures.transformAsync(queryManager.getStateChange(queryId, currentState), this::queryDoneFuture, directExecutor());
     }
 
-    private synchronized URI createNextResultsUri(String scheme, UriInfo uriInfo, long nextToken, boolean binaryResults)
+    private synchronized URI createNextResultsUri(String scheme, UriInfo uriInfo, long nextToken, boolean binaryResults, String statementPathPrefix)
     {
         UriBuilder uri = uriInfo.getBaseUriBuilder()
                 .scheme(scheme)
-                .replacePath("/v1/statement/executing")
+                .replacePath(statementPathPrefix + "/executing")
                 .path(queryId.toString())
                 .path(String.valueOf(nextToken))
                 .replaceQuery("")
@@ -704,7 +709,7 @@ class Query
         return uri.build();
     }
 
-    private synchronized URI createRetryUri(String scheme, UriInfo uriInfo)
+    private synchronized URI createRetryUri(String scheme, UriInfo uriInfo, String statementPathPrefix)
     {
         // Check if we have external retry URL information
         if (retryUrl.isPresent()) {
@@ -722,7 +727,7 @@ class Query
         // Use the default retry mechanism
         UriBuilder uri = uriInfo.getBaseUriBuilder()
                 .scheme(scheme)
-                .replacePath("/v1/statement/queued/retry")
+                .replacePath(statementPathPrefix + "/queued/retry")
                 .path(queryId.toString())
                 .replaceQuery("");
         Optional<DataSize> targetResultSize = getTargetResultSize(session);

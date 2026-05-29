@@ -25,6 +25,7 @@ import com.facebook.presto.common.type.ParameterKind;
 import com.facebook.presto.common.type.TypeSignature;
 import com.facebook.presto.common.type.TypeSignatureParameter;
 import com.facebook.presto.execution.QueryState;
+import com.facebook.presto.protocol.v2.adapter.QueryResultsAdapter;
 import com.facebook.presto.spi.QueryId;
 import com.facebook.presto.spi.function.SqlFunctionId;
 import com.facebook.presto.spi.function.SqlInvokedFunction;
@@ -52,6 +53,7 @@ import java.util.Set;
 import static com.facebook.airlift.json.JsonCodec.jsonCodec;
 import static com.facebook.airlift.json.JsonCodec.listJsonCodec;
 import static com.facebook.airlift.json.JsonCodec.mapJsonCodec;
+import static com.facebook.presto.PrestoMediaTypes.APPLICATION_PRESTO_PROTOBUF;
 import static com.facebook.presto.client.PrestoHeaders.PRESTO_ADDED_PREPARE;
 import static com.facebook.presto.client.PrestoHeaders.PRESTO_ADDED_SESSION_FUNCTION;
 import static com.facebook.presto.client.PrestoHeaders.PRESTO_CLEAR_SESSION;
@@ -95,6 +97,23 @@ public final class QueryResourceUtil
     {
         Response.ResponseBuilder response = Response.ok(queryResults);
 
+        addQueryResponseHeaders(query, compressionEnabled, durationUntilExpirationMs, response);
+
+        return response.build();
+    }
+
+    public static Response toProtocolResponse(Query query, QueryResults queryResults, QueryResultsAdapter queryResultsAdapter, boolean compressionEnabled, long durationUntilExpirationMs)
+    {
+        Response.ResponseBuilder response = Response.ok(queryResultsAdapter.toProtocol(queryResults))
+                .type(APPLICATION_PRESTO_PROTOBUF);
+
+        addQueryResponseHeaders(query, compressionEnabled, durationUntilExpirationMs, response);
+
+        return response.build();
+    }
+
+    private static void addQueryResponseHeaders(Query query, boolean compressionEnabled, long durationUntilExpirationMs, Response.ResponseBuilder response)
+    {
         // add set catalog and schema
         query.getSetCatalog().ifPresent(catalog -> response.header(PRESTO_SET_CATALOG, catalog));
         query.getSetSchema().ifPresent(schema -> response.header(PRESTO_SET_SCHEMA, schema));
@@ -150,8 +169,6 @@ public final class QueryResourceUtil
         }
 
         response.cacheControl(getCacheControlMaxAge(durationUntilExpirationMs));
-
-        return response.build();
     }
 
     public static Response toResponse(
@@ -181,6 +198,36 @@ public final class QueryResourceUtil
                 queryResults.getUpdateCount());
 
         return toResponse(query, resultsClone, compressionEnabled, durationUntilExpirationMs);
+    }
+
+    public static Response toProtocolResponse(
+            Query query,
+            QueryResults queryResults,
+            String xPrestoPrefixUri,
+            boolean compressionEnabled,
+            boolean nestedDataSerializationEnabled,
+            long durationUntilExpirationMs,
+            QueryResultsAdapter queryResultsAdapter)
+    {
+        Iterable<List<Object>> queryResultsData = queryResults.getData();
+        if (nestedDataSerializationEnabled) {
+            queryResultsData = prepareJsonData(queryResults.getColumns(), queryResultsData);
+        }
+        QueryResults resultsClone = new QueryResults(
+                queryResults.getId(),
+                prependUri(queryResults.getInfoUri(), xPrestoPrefixUri),
+                prependUri(queryResults.getPartialCancelUri(), xPrestoPrefixUri),
+                prependUri(queryResults.getNextUri(), xPrestoPrefixUri),
+                queryResults.getColumns(),
+                queryResultsData,
+                queryResults.getBinaryData(),
+                queryResults.getStats(),
+                queryResults.getError(),
+                queryResults.getWarnings(),
+                queryResults.getUpdateType(),
+                queryResults.getUpdateCount());
+
+        return toProtocolResponse(query, resultsClone, queryResultsAdapter, compressionEnabled, durationUntilExpirationMs);
     }
 
     public static CacheControl getCacheControlMaxAge(long durationUntilExpirationMs)
@@ -313,9 +360,14 @@ public final class QueryResourceUtil
 
     public static URI getQueuedUri(QueryId queryId, String slug, long token, UriInfo uriInfo, String xForwardedProto, String xPrestoPrefixUrl, boolean binaryResults)
     {
+        return getQueuedUri(queryId, slug, token, uriInfo, xForwardedProto, xPrestoPrefixUrl, binaryResults, "/v1/statement");
+    }
+
+    public static URI getQueuedUri(QueryId queryId, String slug, long token, UriInfo uriInfo, String xForwardedProto, String xPrestoPrefixUrl, boolean binaryResults, String statementPathPrefix)
+    {
         UriBuilder uriBuilder = uriInfo.getBaseUriBuilder()
                 .scheme(getScheme(xForwardedProto, uriInfo))
-                .replacePath("/v1/statement/queued")
+                .replacePath(statementPathPrefix + "/queued")
                 .path(queryId.toString())
                 .path(String.valueOf(token))
                 .replaceQuery("")
