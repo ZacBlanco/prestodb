@@ -33,13 +33,13 @@ _______________
 * Add N <= 1000 limit guard to `PrefilterForLimitingAggregation` to restrict the optimization to small limits. `#27678 <https://github.com/prestodb/presto/pull/27678>`_
 * Add ``ALTER MATERIALIZED VIEW <name> SET PROPERTIES (...)`` SQL statement to update materialized view properties after creation. :pr:`27806`. `#27806 <https://github.com/prestodb/presto/pull/27806>`_
 * Add :ref:`admin/properties-session:\`\`push_aggregation_through_disjoint_union\`\`` session property (default off) that pushes a ``GROUP BY`` aggregation completely below ``UNION ALL`` when at least one grouping key has constant values that are pairwise distinct across the union branches, eliminating the final aggregation. `#27764 <https://github.com/prestodb/presto/pull/27764>`_
-* Add :ref:`admin/properties-session:\`\`rpc_dispatch_batch_size\`\`` session property to control batch size for RPC dispatch in ``BATCH`` mode. Default: ``128``. A value of ``0`` collects all rows before dispatching. `#27700 <https://github.com/prestodb/presto/pull/27700>`_
-* Add :ref:`admin/properties-session:\`\`rpc_streaming_mode\`\`` session property to control RPC function execution mode (``PER_ROW`` or ``BATCH``). Default: ``PER_ROW``. `#27700 <https://github.com/prestodb/presto/pull/27700>`_
+* Add ``rpc_dispatch_batch_size`` session property to control batch size for RPC dispatch in ``BATCH`` mode. Default: ``128``. A value of ``0`` collects all rows before dispatching. `#27700 <https://github.com/prestodb/presto/pull/27700>`_
+* Add ``rpc_streaming_mode`` session property to control RPC function execution mode (``PER_ROW`` or ``BATCH``). Default: ``PER_ROW``. `#27700 <https://github.com/prestodb/presto/pull/27700>`_
 * Add :ref:`admin/properties-session:\`\`partition_aware_grouped_execution\`\`` session property to schedule each (bucket, partition) as a separate lifespan in grouped execution, reducing per-lifespan data volumes for bucketed tables. Disabled by default. `#27663 <https://github.com/prestodb/presto/pull/27663>`_
 * Add incremental refresh for materialized views. `#26959 <https://github.com/prestodb/presto/pull/26959>`_
 * Add session property :ref:`admin/properties-session:\`\`join_prefilter_build_side_with_complex_probe_side\`\`` (default false) to extend join prefilter optimization to support complex probe-side patterns including UNION ALL, cross join, unnest, and aggregation. `#27598 <https://github.com/prestodb/presto/pull/27598>`_
 * Add optimizer rule `RewriteBucketedSemiJoinToJoin` that rewrites semi-joins into left joins with distinct aggregation when both sides are bucketed on the join key, avoiding data shuffle. Gated behind session property :ref:`admin/properties-session:\`\`rewrite_bucketed_semi_join_to_join\`\`` (default disabled). `#27510 <https://github.com/prestodb/presto/pull/27510>`_
-* Add optimizer rule `RewriteRowConstructorInToDisjunction` that rewrites ROW IN ROW predicates into OR of AND equality chains when all ROW fields are partition keys, enabling per-column TupleDomain extraction for partition pruning. Gated behind session property :ref:`admin/properties-session:\`\`rewrite_row_constructor_in_to_disjunction\`\`` (default disabled). `#27500 <https://github.com/prestodb/presto/pull/27500>`_
+* Add optimizer rule `RewriteRowConstructorInToDisjunction` that rewrites ROW IN ROW predicates into OR of AND equality chains when all ROW fields are partition keys, enabling per-column TupleDomain extraction for partition pruning. Gated behind session property ``rewrite_row_constructor_in_to_disjunction`` (default disabled). `#27500 <https://github.com/prestodb/presto/pull/27500>`_
 * Add session property :ref:`admin/properties-session:\`\`always_analyze_create_table_query_enabled\`\`` to enable analyzing inner queries on ``CREATE TABLE AS SELECT IF NOT EXISTS`` statements when the target table already exists. `#27504 <https://github.com/prestodb/presto/pull/27504>`_
 * Add support for Thrift serialization (`application/x-thrift-binary`, `application/x-thrift-compact`, `application/x-thrift-fb-compact`) to all TaskResource endpoints for consistent internal communication protocol. `#27486 <https://github.com/prestodb/presto/pull/27486>`_
 * Add support for ``ALTER TABLE ... ALTER COLUMN ... SET DEFAULT`` syntax to update Iceberg column write-default values. `#27810 <https://github.com/prestodb/presto/pull/27810>`_
@@ -50,9 +50,10 @@ _______________
 * Update Google BigQuery Storage API SDK from v1beta1 to v1. `#27797 <https://github.com/prestodb/presto/pull/27797>`_
 * Update the default behavior of ``field_names_in_json_cast_enabled`` from false to true. When ``field_names_in_json_cast_enabled = true``, JSON fields are assigned to ROW fields by matching field names regardless of their order in the JSON object. Queries that rely on JSON field order when casting to ROW may return different results after upgrading. If your workload depends on the previous positional behavior, restore it by setting: ``SET SESSION field_names_in_json_cast_enabled = false;``. `#26833 <https://github.com/prestodb/presto/pull/26833>`_
 
-Prestissimo (native Execution) Changes
+Prestissimo (Native Execution) Changes
 ______________________________________
 * Add support for iceberg V3 initialDefaultValue. `#27767 <https://github.com/prestodb/presto/pull/27767>`_
+* Add support for adding plugin loaded types in sidecar plugin. `#27748 <https://github.com/prestodb/presto/pull/27748>`_
 
 Security Changes
 ________________
@@ -122,10 +123,6 @@ Singlestore Connector Changes
 _____________________________
 * Fix TINYINT type mapping to preserve TINYINT semantics instead of incorrectly mapping to BOOLEAN after JDBC driver upgrade. `#27790 <https://github.com/prestodb/presto/pull/27790>`_
 * Fix varchar type mapping for TEXT types to use byte-based thresholds matching the JDBC driver's COLUMN_SIZE reporting. `#27790 <https://github.com/prestodb/presto/pull/27790>`_
-
-Native Sidecar Plugin Changes
-_____________________________
-* Add support for adding plugin loaded types in sidecar plugin. `#27748 <https://github.com/prestodb/presto/pull/27748>`_
 
 
 **Credits**
